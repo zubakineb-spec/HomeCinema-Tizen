@@ -8,13 +8,14 @@ import (
 )
 
 var videoExt = map[string]bool{".mkv": true, ".mp4": true, ".m4v": true, ".avi": true, ".mov": true, ".ts": true, ".m2ts": true, ".webm": true}
-var epS = regexp.MustCompile(`(?i)(?:^|[ ._\-])s([0-9]{1,2})e([0-9]{1,3})`)
+var epS = regexp.MustCompile(`(?i)(?:^|[ ._\-])s([0-9]{1,2})[ ._\-]*e([0-9]{1,3})(?:[ ._\-]|$)`)
 var epX = regexp.MustCompile(`(?i)(?:^|[ ._\-])([0-9]{1,2})x([0-9]{1,3})(?:[ ._\-]|$)`)
 var seasonDir = regexp.MustCompile(`(?i)^(?:season|сезон)[ ._\-]*([0-9]{1,2})$`)
 var seasonS = regexp.MustCompile(`(?i)^s([0-9]{1,2})$`)
 var numericEp = regexp.MustCompile(`(?i)^(?:e|ep|episode|серия)?[ ._\-]*([0-9]{1,3})(?:\D.*)?$`)
 var yearRe = regexp.MustCompile(`(?:19|20)[0-9]{2}`)
 var qualityRe = regexp.MustCompile(`(?i)\b(?:2160p|1080p|720p|480p|4k|uhd|hdr10\+?|hdr|dv|dolby[ ._\-]?vision|bluray|blu[ ._\-]?ray|bdrip|webrip|web[ ._\-]?dl|remux|h\.?26[45]|hevc|x26[45]|aac|ac3|eac3|dts(?:-hd)?|truehd|atmos|proper|repack|extended|multi)\b.*$`)
+var seasonSuffix = regexp.MustCompile(`(?i)(?:^|[ ._\-])(?:s[0-9]{1,2}|season[ ._\-]*[0-9]{1,2}|сезон[ ._\-]*[0-9]{1,2})\b.*$`)
 
 type Parsed struct {
 	Kind, Title, ShowTitle string
@@ -38,6 +39,31 @@ func cleanTitle(s string) string {
 	s = strings.Join(strings.Fields(s), " ")
 	return strings.Trim(s, " ._-")
 }
+func cleanShowTitle(s string) string {
+	s = seasonSuffix.ReplaceAllString(s, "")
+	s = cleanTitle(s)
+	s = strings.TrimSpace(yearRe.ReplaceAllString(s, ""))
+	s = strings.Join(strings.Fields(s), " ")
+	return strings.Trim(s, " ._-")
+}
+func showTitleFromEpisode(stem string, dirs []string, sdIdx int, re *regexp.Regexp) string {
+	if loc := re.FindStringIndex(stem); len(loc) == 2 && loc[0] > 0 {
+		if title := cleanShowTitle(stem[:loc[0]]); title != "" {
+			return title
+		}
+	}
+	if sdIdx > 0 {
+		if title := cleanShowTitle(dirs[sdIdx-1]); title != "" {
+			return title
+		}
+	}
+	if len(dirs) > 0 {
+		if title := cleanShowTitle(dirs[len(dirs)-1]); title != "" {
+			return title
+		}
+	}
+	return "Неизвестный сериал"
+}
 func ParseMedia(rel string) (Parsed, bool) {
 	ext := strings.ToLower(filepath.Ext(rel))
 	if !videoExt[ext] {
@@ -49,10 +75,13 @@ func ParseMedia(rel string) (Parsed, bool) {
 	dirs := parts[:len(parts)-1]
 	stem := strings.TrimSuffix(file, filepath.Ext(file))
 	var sm []string
+	var episodeRe *regexp.Regexp
 	if x := epS.FindStringSubmatch(stem); len(x) > 0 {
 		sm = x
+		episodeRe = epS
 	} else if x := epX.FindStringSubmatch(stem); len(x) > 0 {
 		sm = x
+		episodeRe = epX
 	}
 	sdIdx, sd := -1, -1
 	for i := len(dirs) - 1; i >= 0; i-- {
@@ -65,17 +94,7 @@ func ParseMedia(rel string) (Parsed, bool) {
 	if len(sm) > 2 {
 		s, _ := strconv.Atoi(sm[1])
 		e, _ := strconv.Atoi(sm[2])
-		show := "Неизвестный сериал"
-		if sdIdx > 0 {
-			show = cleanTitle(dirs[sdIdx-1])
-		} else if len(dirs) > 0 {
-			show = cleanTitle(dirs[len(dirs)-1])
-		} else {
-			show = cleanTitle(epS.ReplaceAllString(stem, ""))
-			if show == "" {
-				show = "Неизвестный сериал"
-			}
-		}
+		show := showTitleFromEpisode(stem, dirs, sdIdx, episodeRe)
 		return Parsed{Kind: "episode", Title: "Серия " + strconv.Itoa(e), ShowTitle: show, Season: s, Episode: e}, true
 	}
 	if sdIdx >= 0 {
@@ -83,7 +102,9 @@ func ParseMedia(rel string) (Parsed, bool) {
 			e, _ := strconv.Atoi(m[1])
 			show := "Неизвестный сериал"
 			if sdIdx > 0 {
-				show = cleanTitle(dirs[sdIdx-1])
+				if title := cleanShowTitle(dirs[sdIdx-1]); title != "" {
+					show = title
+				}
 			}
 			return Parsed{Kind: "episode", Title: "Серия " + strconv.Itoa(e), ShowTitle: show, Season: sd, Episode: e}, true
 		}
