@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <widget xmlns="http://www.w3.org/ns/widgets" xmlns:tizen="http://tizen.org/ns/widgets"
-        id="http://homecinema.local/tizen" version="0.2.0" viewmodes="maximized">
+        id="http://homecinema.local/tizen" version="0.2.1" viewmodes="maximized">
     <tizen:application id="HCINEMA001.HomeCinema" package="HCINEMA001" required_version="2.3"/>
     <content src="index.html"/>
     <name>Home Cinema</name>

@@ -16,6 +16,7 @@
         <button class="nav-item focusable" data-view="movies">Фильмы</button>
         <button class="nav-item focusable" data-view="shows">Сериалы</button>
         <button class="nav-item focusable" data-view="search">Поиск</button>
+        <button class="nav-item focusable" data-view="about">О приложении</button>
       </nav>
       <div id="clock"></div>
     </header>
@@ -52,6 +53,20 @@
     </main>
 
     <div id="details" class="overlay hidden"></div>
+
+    <div id="aboutOverlay" class="overlay about-overlay hidden">
+      <div class="about-card">
+        <div class="eyebrow">HOME CINEMA</div>
+        <h1>О приложении</h1>
+        <p>Локальный домашний кинотеатр для Samsung Tizen. Видео хранится в вашей домашней сети.</p>
+        <div class="credits-block">
+          <div class="credits-source">Метаданные и изображения: <strong>TMDB</strong></div>
+          <p class="credits-notice">This product uses the TMDB API but is not endorsed or certified by TMDB.</p>
+          <p class="credits-note">Для распространяемой сборки необходимо использовать утверждённый TMDB logo asset в соответствии с правилами TMDB Logos &amp; Attribution.</p>
+        </div>
+        <button id="aboutBack" class="focusable primary">Назад</button>
+      </div>
+    </div>
 
     <div id="searchOverlay" class="overlay search-overlay hidden">
       <div class="search-box">
