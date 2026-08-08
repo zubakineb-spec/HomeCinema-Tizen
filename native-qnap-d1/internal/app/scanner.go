@@ -17,6 +17,19 @@ func publicURL(base, rel string) string {
 	return strings.TrimRight(base, "/") + "/" + strings.Join(parts, "/")
 }
 
+func skipQNAPDir(name string) bool {
+	lower := strings.ToLower(strings.TrimSpace(name))
+	if strings.HasPrefix(lower, ".@") {
+		return true
+	}
+	switch lower {
+	case "@recycle", "@transcode", "@recently-snapshot", ".streams":
+		return true
+	default:
+		return false
+	}
+}
+
 func ScanLocal(cfg Config) ([]Movie, []Show, []Episode, error) {
 	var movies []Movie
 	var shows []Show
@@ -28,6 +41,9 @@ func ScanLocal(cfg Config) ([]Movie, []Show, []Episode, error) {
 			return nil
 		}
 		if info.IsDir() {
+			if path != cfg.MediaRoot && skipQNAPDir(info.Name()) {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 		rel, e := filepath.Rel(cfg.MediaRoot, path)
@@ -41,17 +57,28 @@ func ScanLocal(cfg Config) ([]Movie, []Show, []Episode, error) {
 		src := publicURL(cfg.MediaBaseURL, rel)
 		if p.Kind == "movie" {
 			movies = append(movies, Movie{SourceURL: src, Title: p.Title, Year: p.Year, MetadataStatus: "pending"})
-		} else {
-			key := strings.ToLower(p.ShowTitle)
-			tid, ok := showTemp[key]
-			if !ok {
-				tid = nextTemp
-				nextTemp++
-				showTemp[key] = tid
-				shows = append(shows, Show{ID: tid, Title: p.ShowTitle, MetadataStatus: "pending"})
-			}
-			episodes = append(episodes, Episode{ShowID: tid, SourceURL: src, Season: p.Season, Episode: p.Episode, Title: p.Title, MetadataStatus: "pending"})
+			return nil
 		}
+
+		key := strings.ToLower(p.ShowTitle)
+		tid, ok := showTemp[key]
+		if !ok {
+			tid = nextTemp
+			nextTemp++
+			showTemp[key] = tid
+			shows = append(shows, Show{ID: tid, Title: p.ShowTitle, MetadataStatus: "pending"})
+		}
+
+		contentType := "episode"
+		metadataStatus := "pending"
+		if p.Kind == "extra" {
+			contentType = "extra"
+			metadataStatus = "local"
+		}
+		episodes = append(episodes, Episode{
+			ShowID: tid, SourceURL: src, Season: p.Season, Episode: p.Episode,
+			Title: p.Title, ContentType: contentType, MetadataStatus: metadataStatus,
+		})
 		return nil
 	})
 	if os.IsNotExist(err) {

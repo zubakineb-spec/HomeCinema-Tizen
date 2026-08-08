@@ -22,17 +22,22 @@ function fmtEpisode(e){return 'S'+pad2(e.season)+'E'+pad2(e.episode)}
 function card(item,type){
   var title=item.title||'Без названия';
   var img=item.poster_url||'';
-  var meta=type==='show'?((item.season_count||0)+' сез. • '+(item.episode_count||0)+' сер.'):(item.year||'Фильм');
+  var meta;
+  if(type==='show'){
+    meta=(item.season_count||0)+' сез. • '+(item.episode_count||0)+' сер.';
+    if(Number(item.extra_count||0)>0)meta+=' • '+Number(item.extra_count)+' доп.';
+  }else meta=item.year||'Фильм';
   return '<button class="card focusable" data-type="'+type+'" data-id="'+item.id+'">'+
     '<div class="poster" '+(img?'style="background-image:url(\''+esc(img)+'\')"':'')+'><span class="badge">'+(type==='show'?'СЕРИАЛ':'ФИЛЬМ')+'</span></div>'+
     '<div class="card-title">'+esc(title)+'</div><div class="card-meta">'+esc(meta)+'</div></button>';
 }
 
 function continueCard(item){
-  var title=item.media_type==='episode'?(item.parent_title||item.title):(item.title||'Фильм');
-  var subtitle=item.media_type==='episode'?(fmtEpisode(item)+' • '+(item.title||'Серия')):'Продолжить фильм';
+  var showContent=item.media_type==='episode'||item.media_type==='extra';
+  var title=showContent?(item.parent_title||item.title):(item.title||'Фильм');
+  var subtitle=item.media_type==='episode'?(fmtEpisode(item)+' • '+(item.title||'Серия')):(item.media_type==='extra'?('Доп. материал • '+(item.title||'Видео')):'Продолжить фильм');
   var img=item.image_url||item.backdrop_url||'';
-  return '<button class="continue-card focusable" data-continue="1" data-source="'+esc(item.source_url)+'" data-title="'+esc(title+(item.media_type==='episode'?' — '+(item.title||'Серия'):''))+'">'+
+  return '<button class="continue-card focusable" data-continue="1" data-source="'+esc(item.source_url)+'" data-title="'+esc(title+(showContent?' — '+(item.title||'Видео'):''))+'">'+
     '<div class="continue-image" '+(img?'style="background-image:url(\''+esc(img)+'\')"':'')+'><div class="continue-shade"></div><div class="continue-copy">'+
     '<div class="continue-title">'+esc(title)+'</div><div class="continue-subtitle">'+esc(subtitle)+'</div><div class="continue-progress"><span style="width:'+Number(item.progress_percent||0)+'%"></span></div>'+
     '</div></div></button>';
@@ -119,10 +124,21 @@ function episodeRows(item){
   }).join('');
 }
 
+function extraRows(item){
+  return (item.extras||[]).map(function(e){
+    var still=e.still_url||item.backdrop_url||'';
+    return '<button class="episode focusable" data-source="'+esc(e.source_url)+'" data-title="'+esc(item.title+' — '+(e.title||'Доп. материал'))+'">'+
+      '<div class="episode-still" '+(still?'style="background-image:url(\''+esc(still)+'\')"':'')+'></div><div><div class="episode-title">'+esc(e.title||'Доп. материал')+'</div>'+
+      '<div class="episode-meta">Дополнительный материал</div><div class="episode-overview">'+esc(e.overview||'')+'</div></div></button>';
+  }).join('');
+}
+
 function renderShowPane(item){
   var pane=$('#seriesPane');
   if(!pane)return;
-  pane.innerHTML='<div class="season-tabs">'+seasonTabs(item)+'</div><div class="episode-list">'+episodeRows(item)+'</div>';
+  var extras=extraRows(item);
+  pane.innerHTML='<div class="season-tabs">'+seasonTabs(item)+'</div><div class="episode-list">'+episodeRows(item)+'</div>'+
+    (extras?'<div class="episode-meta">Доп. материалы</div><div class="episode-list">'+extras+'</div>':'');
   pane.querySelectorAll('[data-season]').forEach(function(el){el.onclick=function(){var seasonNo=Number(el.dataset.season);state.selectedSeason=seasonNo;renderShowPane(item);var next=pane.querySelector('[data-season="'+seasonNo+'"]');rebuildFocus(next)}});
   pane.querySelectorAll('[data-source]').forEach(function(el){el.onclick=function(){play(el.dataset.source,el.dataset.title)}});
   rebuildFocus();
@@ -256,7 +272,7 @@ function key(e){
 function bindStatic(){
   $$('.nav-item').forEach(function(el){el.onclick=function(){setView(el.dataset.view)}});
   $('#heroPlay').onclick=function(){if(state.heroItem){if(state.heroItem.source_url)play(state.heroItem.source_url,state.heroItem.title);else openDetails('show',state.heroItem.id)}};
-  var scan=$('#scanButton');if(scan)scan.onclick=function(){toast('Сканирование запущено…');api('/api/scan',{method:'POST'}).then(function(r){toast('Найдено: '+r.movies+' фильмов, '+r.shows+' сериалов, '+r.episodes+' серий');return load()}).catch(function(){toast('Не удалось просканировать медиатеку')})};
+  var scan=$('#scanButton');if(scan)scan.onclick=function(){toast('Сканирование запущено…');api('/api/scan',{method:'POST'}).then(function(r){toast('Найдено: '+r.movies+' фильмов, '+r.shows+' сериалов, '+r.episodes+' серий'+(r.extras?(', '+r.extras+' доп.'):'') );return load()}).catch(function(){toast('Не удалось просканировать медиатеку')})};
   $('#searchInput').addEventListener('input',function(){clearTimeout(state.searchTimer);state.searchTimer=setTimeout(runSearch,250)});
 }
 

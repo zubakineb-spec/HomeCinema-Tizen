@@ -40,6 +40,7 @@ type Episode struct {
 	Season         int    `json:"season"`
 	Episode        int    `json:"episode"`
 	Title          string `json:"title"`
+	ContentType    string `json:"content_type,omitempty"`
 	Overview       string `json:"overview,omitempty"`
 	StillURL       string `json:"still_url,omitempty"`
 	Runtime        int    `json:"runtime,omitempty"`

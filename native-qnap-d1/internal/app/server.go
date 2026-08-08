@@ -87,7 +87,11 @@ func (s *Server) scan(w http.ResponseWriter, r *http.Request) {
 	if s.tmdb.enabled() {
 		matched = s.enrich()
 	}
-	jsonOut(w, map[string]any{"source": s.cfg.MediaRoot, "video_files": len(m) + len(ep), "movies": len(m), "shows": len(sh), "episodes": len(ep), "ignored": 0, "tmdb_enabled": s.tmdb.enabled(), "movies_matched": matched["movies_matched"], "shows_matched": matched["shows_matched"], "episodes_matched": matched["episodes_matched"]})
+	episodeCount, extraCount := 0, 0
+	for _, item := range ep {
+		if isExtra(item) { extraCount++ } else { episodeCount++ }
+	}
+	jsonOut(w, map[string]any{"source": s.cfg.MediaRoot, "video_files": len(m) + len(ep), "movies": len(m), "shows": len(sh), "episodes": episodeCount, "extras": extraCount, "ignored": 0, "tmdb_enabled": s.tmdb.enabled(), "movies_matched": matched["movies_matched"], "shows_matched": matched["shows_matched"], "episodes_matched": matched["episodes_matched"]})
 }
 func (s *Server) enrich() map[string]int {
 	st := s.store.Snapshot()
@@ -111,8 +115,12 @@ func (s *Server) enrich() map[string]int {
 		}
 	}
 	for i := range st.Shows {
-		if st.Shows[i].MetadataStatus != "matched" {
-			d, e := s.tmdb.Show(st.Shows[i].Title)
+		preferredID := preferredTMDBShowID(st.Shows[i].Title)
+		needsShowLookup := st.Shows[i].MetadataStatus != "matched" || (preferredID > 0 && st.Shows[i].TMDBID != preferredID)
+		if needsShowLookup {
+			var d details
+			var e error
+			if preferredID > 0 { d, e = s.tmdb.ShowByID(preferredID) } else { d, e = s.tmdb.Show(st.Shows[i].Title) }
 			if e == nil && d.ID > 0 {
 				st.Shows[i].TMDBID = d.ID
 				st.Shows[i].OriginalTitle = d.OriginalName
@@ -127,7 +135,7 @@ func (s *Server) enrich() map[string]int {
 		}
 		if st.Shows[i].TMDBID > 0 {
 			for j := range st.Episodes {
-				if st.Episodes[j].ShowID != st.Shows[i].ID || st.Episodes[j].MetadataStatus == "matched" {
+				if st.Episodes[j].ShowID != st.Shows[i].ID || st.Episodes[j].MetadataStatus == "matched" || st.Episodes[j].MetadataStatus == "local" || isExtra(st.Episodes[j]) {
 					continue
 				}
 				d, e := s.tmdb.Episode(st.Shows[i].TMDBID, st.Episodes[j].Season, st.Episodes[j].Episode)
@@ -149,6 +157,15 @@ func (s *Server) enrich() map[string]int {
 	return out
 }
 func (s *Server) catalog(w http.ResponseWriter, r *http.Request) { jsonOut(w, Catalog(s.store.Snapshot())) }
+func showCounts(st State, showID int) (episodeCount, seasonCount, extraCount int) {
+	seasons := map[int]bool{}
+	for _, e := range st.Episodes {
+		if e.ShowID != showID { continue }
+		if isExtra(e) { extraCount++; continue }
+		episodeCount++; seasons[e.Season] = true
+	}
+	return episodeCount, len(seasons), extraCount
+}
 func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 	q := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("q")))
 	st := s.store.Snapshot()
@@ -160,10 +177,8 @@ func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 		}
 		for _, sh := range st.Shows {
 			if strings.Contains(strings.ToLower(sh.Title+" "+sh.OriginalTitle), q) {
-				seasons := map[int]bool{}
-				count := 0
-				for _, e := range st.Episodes { if e.ShowID == sh.ID { count++; seasons[e.Season] = true } }
-				x := toMap(sh); x["episode_count"] = count; x["season_count"] = len(seasons); shows = append(shows, x)
+				episodeCount, seasonCount, extraCount := showCounts(st, sh.ID)
+				x := toMap(sh); x["episode_count"] = episodeCount; x["season_count"] = seasonCount; x["extra_count"] = extraCount; shows = append(shows, x)
 			}
 		}
 	}
@@ -184,9 +199,14 @@ func (s *Server) show(w http.ResponseWriter, r *http.Request) {
 	for i := range st.Shows { if st.Shows[i].ID == id { found = &st.Shows[i]; break } }
 	if found == nil { jsonErr(w, 404, "Show not found"); return }
 	eps := []Episode{}
-	for _, ep := range st.Episodes { if ep.ShowID == id { eps = append(eps, ep) } }
+	extras := []Episode{}
+	for _, ep := range st.Episodes {
+		if ep.ShowID != id { continue }
+		if isExtra(ep) { extras = append(extras, ep) } else { eps = append(eps, ep) }
+	}
 	sort.Slice(eps, func(i, j int) bool { if eps[i].Season == eps[j].Season { return eps[i].Episode < eps[j].Episode }; return eps[i].Season < eps[j].Season })
-	res := toMap(*found); res["episodes"] = eps
+	sort.Slice(extras, func(i, j int) bool { return extras[i].Title < extras[j].Title })
+	res := toMap(*found); res["episodes"] = eps; res["extras"] = extras; res["extra_count"] = len(extras)
 	seasonMap := map[int][]Episode{}
 	for _, ep := range eps { seasonMap[ep.Season] = append(seasonMap[ep.Season], ep) }
 	nums := []int{}; for n := range seasonMap { nums = append(nums, n) }; sort.Ints(nums)
@@ -215,7 +235,10 @@ func (s *Server) continueWatching(w http.ResponseWriter, r *http.Request) {
 			if e.SourceURL == p.SourceURL {
 				parent, back, poster := "", "", ""; for _, sh := range st.Shows { if sh.ID == e.ShowID { parent=sh.Title; back=sh.BackdropURL; poster=sh.PosterURL } }
 				img := e.StillURL; if img=="" { img=back }; if img=="" { img=poster }
-				items = append(items, item{"media_type":"episode","id":e.ID,"title":e.Title,"parent_title":parent,"source_url":e.SourceURL,"image_url":img,"backdrop_url":back,"position_ms":p.PositionMS,"duration_ms":p.DurationMS,"updated_at":p.UpdatedAt,"season":e.Season,"episode":e.Episode,"show_id":e.ShowID,"progress_percent":float64(p.PositionMS)*100/float64(p.DurationMS)})
+				mediaType := "episode"; if isExtra(e) { mediaType = "extra" }
+				x := item{"media_type":mediaType,"id":e.ID,"title":e.Title,"parent_title":parent,"source_url":e.SourceURL,"image_url":img,"backdrop_url":back,"position_ms":p.PositionMS,"duration_ms":p.DurationMS,"updated_at":p.UpdatedAt,"show_id":e.ShowID,"progress_percent":float64(p.PositionMS)*100/float64(p.DurationMS)}
+				if !isExtra(e) { x["season"] = e.Season; x["episode"] = e.Episode }
+				items = append(items, x)
 			}
 		}
 	}

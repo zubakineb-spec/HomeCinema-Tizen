@@ -2,9 +2,9 @@
 set -eu
 
 APP=HomeCinemaD1
-VERSION=0.3.2
+VERSION=0.3.7
 QPKG_CONF=/etc/config/qpkg.conf
-BASE_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+BASE_DIR="$(cd "$(dirname "$0")" 2>/dev/null && pwd)"
 
 fail(){ echo "ERROR: $*" >&2; exit 1; }
 info(){ echo "[HomeCinemaD1] $*"; }
@@ -65,7 +65,7 @@ fi
 cat > "$APPDIR/homecinema.sh" <<'SVCEOF'
 #!/bin/sh
 set -u
-APPDIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+APPDIR="$(cd "$(dirname "$0")" 2>/dev/null && pwd)"
 . "$APPDIR/homecinema.conf"
 PIDFILE="$HC_DATA_DIR/homecinema.pid"
 LOGFILE="$HC_DATA_DIR/homecinema.log"
@@ -74,7 +74,7 @@ case "${1:-start}" in
     if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE" 2>/dev/null)" 2>/dev/null; then exit 0; fi
     mkdir -p "$HC_DATA_DIR" "$HC_DATA_DIR/hls"
     cd "$APPDIR" || exit 1
-    nohup "$APPDIR/homecinema-d1" >>"$LOGFILE" 2>&1 &
+    ( trap '' HUP; exec "$APPDIR/homecinema-d1" >>"$LOGFILE" 2>&1 </dev/null ) &
     echo $! > "$PIDFILE"
     ;;
   stop)
