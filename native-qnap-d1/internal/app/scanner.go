@@ -17,6 +17,19 @@ func publicURL(base, rel string) string {
 	return strings.TrimRight(base, "/") + "/" + strings.Join(parts, "/")
 }
 
+func skipQNAPDir(name string) bool {
+	lower := strings.ToLower(strings.TrimSpace(name))
+	if strings.HasPrefix(lower, ".@") {
+		return true
+	}
+	switch lower {
+	case "@recycle", "@transcode", "@recently-snapshot", ".streams":
+		return true
+	default:
+		return false
+	}
+}
+
 func ScanLocal(cfg Config) ([]Movie, []Show, []Episode, error) {
 	var movies []Movie
 	var shows []Show
@@ -28,6 +41,9 @@ func ScanLocal(cfg Config) ([]Movie, []Show, []Episode, error) {
 			return nil
 		}
 		if info.IsDir() {
+			if path != cfg.MediaRoot && skipQNAPDir(info.Name()) {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 		rel, e := filepath.Rel(cfg.MediaRoot, path)
