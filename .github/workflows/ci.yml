@@ -41,4 +41,38 @@ jobs:
           package-manager-cache: false
 
       - name: TV JavaScript syntax check
-        run: node --check tv-app/js/app.js
+        run: node --check tv-app/js/app.js && node --check tv-app/js/config.js
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: "1.23.x"
+          cache-dependency-path: native-qnap-d1/go.mod
+
+      - name: QNAP D1 native tests
+        working-directory: native-qnap-d1
+        run: go test ./...
+
+      - name: Build QNAP D1 ARMv7 binary
+        working-directory: native-qnap-d1
+        env:
+          CGO_ENABLED: "0"
+          GOOS: linux
+          GOARCH: arm
+          GOARM: "7"
+        run: go build -trimpath -ldflags="-s -w" -o ../qnap-d1-dist/homecinema-d1 ./cmd/homecinema-d1
+
+      - name: Assemble QNAP D1 install bundle
+        run: |
+          cp qnap-d1/*.sh qnap-d1-dist/
+          cp qnap-d1/README-QNAP-D1.md qnap-d1-dist/
+          cp VERSION qnap-d1-dist/VERSION
+          cp -R tv-app qnap-d1-dist/www
+          chmod +x qnap-d1-dist/homecinema-d1 qnap-d1-dist/*.sh
+
+      - name: Upload QNAP D1 ARMv7 bundle
+        uses: actions/upload-artifact@v5
+        with:
+          name: HomeCinema-D1-armv7-v0.3.2
+          path: qnap-d1-dist/
+          if-no-files-found: error
