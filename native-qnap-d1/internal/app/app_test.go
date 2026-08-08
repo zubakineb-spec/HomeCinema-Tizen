@@ -53,10 +53,32 @@ func TestParseSeriesReleaseDirectoryTitle(t *testing.T) {
 		t.Fatalf("%+v", p)
 	}
 }
+func TestParsePashaMakingOfAsExtra(t *testing.T) {
+	p, ok := ParseMedia("Pasha.S01.2026.WEB-DL.1080p.ExKinoRay/Pasha.S01.E09.2026.WEB-DL.1080p.ExKinoRay.mkv")
+	if !ok || p.Kind != "extra" || p.ShowTitle != "Pasha" || p.Title != "Фильм о фильме" || p.Season != 1 || p.Episode != 9 {
+		t.Fatalf("%+v", p)
+	}
+}
 func TestParseSeriesNumeric(t *testing.T) {
 	p, ok := ParseMedia("Series/Игра престолов/Сезон 02/03.mkv")
 	if !ok || p.ShowTitle != "Игра престолов" || p.Season != 2 || p.Episode != 3 {
 		t.Fatalf("%+v", p)
+	}
+}
+func TestPreferredAfterLifeTMDBID(t *testing.T) {
+	if got := preferredTMDBShowID("After Life"); got != 79410 {
+		t.Fatalf("preferred id=%d", got)
+	}
+}
+func TestCatalogExcludesExtrasFromEpisodeCount(t *testing.T) {
+	st := State{Shows: []Show{{ID: 1, Title: "Pasha"}}, Episodes: []Episode{
+		{ID: 10, ShowID: 1, Season: 1, Episode: 1, ContentType: "episode"},
+		{ID: 11, ShowID: 1, Season: 1, Episode: 9, ContentType: "extra", Title: "Фильм о фильме", MetadataStatus: "local"},
+	}}
+	cat := Catalog(st)
+	shows := cat["shows"].([]map[string]any)
+	if len(shows) != 1 || shows[0]["episode_count"] != 1 || shows[0]["extra_count"] != 1 || shows[0]["season_count"] != 1 {
+		t.Fatalf("unexpected catalog: %#v", shows)
 	}
 }
 func TestSourceLocalTraversal(t *testing.T) {
@@ -69,39 +91,36 @@ func TestSourceLocalTraversal(t *testing.T) {
 func TestScanBuildsPublicURL(t *testing.T) {
 	root := t.TempDir()
 	d := filepath.Join(root, "Series", "Fallout", "Season 01")
-	if e := os.MkdirAll(d, 0755); e != nil {
-		t.Fatal(e)
-	}
-	if e := os.WriteFile(filepath.Join(d, "01.mkv"), []byte("x"), 0644); e != nil {
-		t.Fatal(e)
-	}
+	if e := os.MkdirAll(d, 0755); e != nil { t.Fatal(e) }
+	if e := os.WriteFile(filepath.Join(d, "01.mkv"), []byte("x"), 0644); e != nil { t.Fatal(e) }
 	cfg := Config{MediaRoot: root, MediaBaseURL: "http://192.168.0.101/media/"}
 	_, s, e, err := ScanLocal(cfg)
-	if err != nil || len(s) != 1 || len(e) != 1 {
-		t.Fatalf("%v %d %d", err, len(s), len(e))
-	}
+	if err != nil || len(s) != 1 || len(e) != 1 { t.Fatalf("%v %d %d", err, len(s), len(e)) }
 	u, err := url.Parse(e[0].SourceURL)
-	if err != nil || u.Path != "/media/Series/Fallout/Season 01/01.mkv" {
-		t.Fatalf("%s %v", e[0].SourceURL, err)
-	}
+	if err != nil || u.Path != "/media/Series/Fallout/Season 01/01.mkv" { t.Fatalf("%s %v", e[0].SourceURL, err) }
 }
 func TestScanSkipsQNAPThumbDirectories(t *testing.T) {
 	root := t.TempDir()
 	d := filepath.Join(root, "After Life S01 (1080p)")
 	thumb := filepath.Join(d, ".@__thumb")
-	if e := os.MkdirAll(thumb, 0755); e != nil {
-		t.Fatal(e)
-	}
+	if e := os.MkdirAll(thumb, 0755); e != nil { t.Fatal(e) }
 	name := "After.Life.2019.S01E01.1080p.WEB-DL.KvK.mkv"
-	if e := os.WriteFile(filepath.Join(d, name), []byte("x"), 0644); e != nil {
-		t.Fatal(e)
-	}
-	if e := os.WriteFile(filepath.Join(thumb, "s800"+name), []byte("x"), 0644); e != nil {
-		t.Fatal(e)
-	}
+	if e := os.WriteFile(filepath.Join(d, name), []byte("x"), 0644); e != nil { t.Fatal(e) }
+	if e := os.WriteFile(filepath.Join(thumb, "s800"+name), []byte("x"), 0644); e != nil { t.Fatal(e) }
 	cfg := Config{MediaRoot: root, MediaBaseURL: "http://192.168.0.101:8096/media/"}
 	m, s, e, err := ScanLocal(cfg)
-	if err != nil || len(m) != 0 || len(s) != 1 || len(e) != 1 {
-		t.Fatalf("err=%v movies=%d shows=%d episodes=%d", err, len(m), len(s), len(e))
+	if err != nil || len(m) != 0 || len(s) != 1 || len(e) != 1 { t.Fatalf("err=%v movies=%d shows=%d episodes=%d", err, len(m), len(s), len(e)) }
+}
+func TestScanMarksPashaMakingOfLocalExtra(t *testing.T) {
+	root := t.TempDir()
+	d := filepath.Join(root, "Pasha.S01.2026.WEB-DL.1080p.ExKinoRay")
+	if err := os.MkdirAll(d, 0755); err != nil { t.Fatal(err) }
+	name := "Pasha.S01.E09.2026.WEB-DL.1080p.ExKinoRay.mkv"
+	if err := os.WriteFile(filepath.Join(d, name), []byte("x"), 0644); err != nil { t.Fatal(err) }
+	cfg := Config{MediaRoot: root, MediaBaseURL: "http://192.168.0.101:8096/media/"}
+	_, shows, items, err := ScanLocal(cfg)
+	if err != nil || len(shows) != 1 || len(items) != 1 { t.Fatalf("err=%v shows=%d items=%d", err, len(shows), len(items)) }
+	if !isExtra(items[0]) || items[0].MetadataStatus != "local" || items[0].Title != "Фильм о фильме" {
+		t.Fatalf("unexpected extra: %+v", items[0])
 	}
 }
