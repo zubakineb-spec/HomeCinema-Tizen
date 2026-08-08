@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.3.7 - 2026-08-09
+
+- Reclassified the target-library `Pasha S01E09` file as the local extra `Фильм о фильме` instead of a ninth episode.
+- Added explicit `extra` content type and local metadata status so bonus material is never sent to TMDB episode lookup.
+- Show/catalog API now reports real episodes and extras separately (`81` episodes + `1` extra for the current 90-file library).
+- Samsung TV UI now renders extras under `Доп. материалы`; show cards display counts such as `8 сер. • 1 доп.`.
+- Pinned ambiguous `After Life` metadata to the verified TMDB series ID `79410` so pending S01E05/S01E06 are retried against the correct 2019 series.
+
+## 0.3.6 - 2026-08-08
+
+- Added retry/backoff for transient TMDB network, HTTP 429 and 5xx failures.
+- Added Russian title aliases `Holod -> Холод` and `Na ldu -> На льду` for the target QNAP library.
+- Recovered metadata for both previously unmatched series and their local episodes.
+
+## 0.3.5 - 2026-08-08
+
+- Added live `--tmdb-test` diagnostics for authenticated TMDB connectivity.
+- Exposed exact TMDB HTTP/DNS/TLS failures instead of silently collapsing them into zero matched items.
+- Diagnosed the target QNAP DNS path returning the NAS itself for `api.themoviedb.org`; temporary `/etc/hosts` routing restored valid TLS/TMDB access without disabling certificate validation.
+
 ## 0.3.4 - 2026-08-08
 
 - Normalized real-world movie release filenames before TMDB matching.
