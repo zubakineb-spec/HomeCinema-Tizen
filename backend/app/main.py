@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -47,6 +47,16 @@ async def scan():
 @app.get("/api/catalog")
 def catalog():
     return db.catalog()
+
+
+@app.get("/api/search")
+def search(q: str = Query(default="", max_length=160)):
+    return db.search(q)
+
+
+@app.get("/api/continue")
+def continue_watching(limit: int = Query(default=20, ge=1, le=100)):
+    return {"items": db.continue_watching(limit)}
 
 
 @app.get("/api/movies/{movie_id}")
