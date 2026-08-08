@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.3.4 - 2026-08-08
+
+- Normalized real-world movie release filenames before TMDB matching.
+- Preserved title words such as `Multi-Pulti` instead of treating `Multi` as a language tag.
+- Added handling for release/source tags such as `MA`, `DCPRip`, `AMZN` and common streaming-source markers.
+- Added regression coverage for the eight movie filenames observed on the target QNAP D1 library.
+
+## 0.3.3 - 2026-08-08
+
+- Added QTS 4.3.6 / BusyBox 1.01 compatibility by removing unsupported `dirname --`, `cd --` and `nohup` usage.
+- Added QNAP service launch compatible with the target D1 firmware.
+- Skipped QNAP-generated thumbnail/recycle directories during media scans.
+- Added series parsing for dotted episode notation such as `S01.E05`.
+- Improved release-directory cleanup for series titles such as `After Life` and `The Dark`.
+
 ## 0.3.2 - 2026-08-08
 
 - Added native QNAP D1 runtime for ARMv7 / QTS 4.3.6 without Docker or Python.
