@@ -13,7 +13,18 @@ func main() {
 		fmt.Println(app.Version)
 		return
 	}
+
 	cfg := app.LoadConfig()
+	if len(os.Args) > 1 && os.Args[1] == "--tmdb-test" {
+		tmdb := app.NewTMDB(cfg.TMDBToken)
+		if err := tmdb.Probe(); err != nil {
+			fmt.Printf("TMDB_ERROR=%v\n", err)
+			os.Exit(3)
+		}
+		fmt.Println("TMDB_OK")
+		return
+	}
+
 	srv, err := app.NewServer(cfg)
 	if err != nil {
 		log.Fatal(err)
