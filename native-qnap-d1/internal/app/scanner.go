@@ -57,17 +57,28 @@ func ScanLocal(cfg Config) ([]Movie, []Show, []Episode, error) {
 		src := publicURL(cfg.MediaBaseURL, rel)
 		if p.Kind == "movie" {
 			movies = append(movies, Movie{SourceURL: src, Title: p.Title, Year: p.Year, MetadataStatus: "pending"})
-		} else {
-			key := strings.ToLower(p.ShowTitle)
-			tid, ok := showTemp[key]
-			if !ok {
-				tid = nextTemp
-				nextTemp++
-				showTemp[key] = tid
-				shows = append(shows, Show{ID: tid, Title: p.ShowTitle, MetadataStatus: "pending"})
-			}
-			episodes = append(episodes, Episode{ShowID: tid, SourceURL: src, Season: p.Season, Episode: p.Episode, Title: p.Title, MetadataStatus: "pending"})
+			return nil
 		}
+
+		key := strings.ToLower(p.ShowTitle)
+		tid, ok := showTemp[key]
+		if !ok {
+			tid = nextTemp
+			nextTemp++
+			showTemp[key] = tid
+			shows = append(shows, Show{ID: tid, Title: p.ShowTitle, MetadataStatus: "pending"})
+		}
+
+		contentType := "episode"
+		metadataStatus := "pending"
+		if p.Kind == "extra" {
+			contentType = "extra"
+			metadataStatus = "local"
+		}
+		episodes = append(episodes, Episode{
+			ShowID: tid, SourceURL: src, Season: p.Season, Episode: p.Episode,
+			Title: p.Title, ContentType: contentType, MetadataStatus: metadataStatus,
+		})
 		return nil
 	})
 	if os.IsNotExist(err) {
