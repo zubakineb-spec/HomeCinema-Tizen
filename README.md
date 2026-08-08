@@ -110,3 +110,15 @@ SemVer. Базовый релиз: `v0.1.0`. Текущая версия раз�
 - В плеере `↑` — открыть выбор аудиодорожки и субтитров.
 
 Для сериалов сервер группирует найденные эпизоды по сезонам независимо от того, называются ли каталоги `Season 01`, `Сезон 01` или `S01`. Файлы внутри сезона могут быть вида `S01E01.mkv`, `1x01.mkv` или `01 - Название серии.mkv`.
+
+## Сборка и установка на Samsung TV
+
+После установки Tizen Studio + Samsung TV Extension + Web CLI и создания Samsung certificate profile:
+
+```powershell
+.\BUILD-SAMSUNG-WGT.ps1 -CertificateProfile "ИмяПрофиля"
+sdb devices
+.\INSTALL-SAMSUNG-WGT.ps1 -Target "имя-target"
+```
+
+Подробно: `docs/SAMSUNG-INSTALL.md`.

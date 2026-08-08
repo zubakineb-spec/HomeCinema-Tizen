@@ -12,10 +12,12 @@ var API_BASE=(location.protocol==='http:'||location.protocol==='https:')?'':(win
 
 function api(path,opts){return fetch(API_BASE+path,opts).then(function(r){if(!r.ok){return r.text().then(function(t){throw new Error(t)})}return r.json()})}
 function esc(v){return String(v||'').replace(/[&<>"']/g,function(m){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]})}
-function visible(el){return !el.closest('.hidden')}
+function closest(el,selector){while(el&&el!==document){if(el.matches&&el.matches(selector))return el;el=el.parentElement}return null}
+function visible(el){return !closest(el,'.hidden')}
 function toast(msg){var e=$('#toast');e.textContent=msg;e.classList.remove('hidden');setTimeout(function(){e.classList.add('hidden')},2500)}
 function fmtSeason(n){return 'Сезон '+Number(n||0)}
-function fmtEpisode(e){return 'S'+String(e.season||0).padStart(2,'0')+'E'+String(e.episode||0).padStart(2,'0')}
+function pad2(v){v=String(v||0);return v.length<2?'0'+v:v}
+function fmtEpisode(e){return 'S'+pad2(e.season)+'E'+pad2(e.episode)}
 
 function card(item,type){
   var title=item.title||'Без названия';
@@ -39,10 +41,11 @@ function continueCard(item){
 function rebuildFocus(preferred){
   state.focusables=$$('.focusable').filter(visible);
   if(preferred){var i=state.focusables.indexOf(preferred);if(i>=0)state.focus=i}
+  if(state.focus<0)state.focus=0;
   if(state.focus>=state.focusables.length)state.focus=Math.max(0,state.focusables.length-1);
   state.focusables.forEach(function(x){x.classList.remove('focused')});
   var el=state.focusables[state.focus];
-  if(el){el.classList.add('focused');try{el.scrollIntoView({block:'nearest',inline:'nearest',behavior:'smooth'})}catch(_){el.scrollIntoView(false)}}
+  if(el){el.classList.add('focused');try{el.focus({preventScroll:true})}catch(_){try{el.focus()}catch(__){}}try{el.scrollIntoView({block:'nearest',inline:'nearest',behavior:'smooth'})}catch(_){el.scrollIntoView(false)}}
 }
 
 function setHero(item){
@@ -71,7 +74,7 @@ function wireCards(scope){
     el.onfocus=function(){
       var type=el.dataset.type,id=Number(el.dataset.id);
       var arr=type==='movie'?state.catalog.movies:state.catalog.shows;
-      var item=arr.find(function(x){return Number(x.id)===id});
+      var item=null;for(var i=0;i<arr.length;i++){if(Number(arr[i].id)===id){item=arr[i];break}}
       if(item&&state.mode==='home')setHero(item);
     };
   });
@@ -106,7 +109,7 @@ function seasonTabs(item){
 }
 
 function episodeRows(item){
-  var season=(item.seasons||[]).find(function(s){return Number(s.number)===Number(state.selectedSeason)});
+  var season=null;var allSeasons=item.seasons||[];for(var i=0;i<allSeasons.length;i++){if(Number(allSeasons[i].number)===Number(state.selectedSeason)){season=allSeasons[i];break}}
   if(!season)return '<div class="episode-meta">Серии не найдены.</div>';
   return season.episodes.map(function(e){
     var still=e.still_url||item.backdrop_url||'';
@@ -120,7 +123,7 @@ function renderShowPane(item){
   var pane=$('#seriesPane');
   if(!pane)return;
   pane.innerHTML='<div class="season-tabs">'+seasonTabs(item)+'</div><div class="episode-list">'+episodeRows(item)+'</div>';
-  pane.querySelectorAll('[data-season]').forEach(function(el){el.onclick=function(){state.selectedSeason=Number(el.dataset.season);renderShowPane(item);state.focus=state.focusables.indexOf(el);rebuildFocus()}});
+  pane.querySelectorAll('[data-season]').forEach(function(el){el.onclick=function(){var seasonNo=Number(el.dataset.season);state.selectedSeason=seasonNo;renderShowPane(item);var next=pane.querySelector('[data-season="'+seasonNo+'"]');rebuildFocus(next)}});
   pane.querySelectorAll('[data-source]').forEach(function(el){el.onclick=function(){play(el.dataset.source,el.dataset.title)}});
   rebuildFocus();
 }
@@ -258,7 +261,7 @@ function bindStatic(){
 }
 
 document.addEventListener('keydown',key);
-document.addEventListener('click',function(e){var f=e.target.closest('.focusable');if(f){var i=state.focusables.indexOf(f);if(i>=0){state.focus=i;rebuildFocus(f)}}});
+document.addEventListener('click',function(e){var f=closest(e.target,'.focusable');if(f){var i=state.focusables.indexOf(f);if(i>=0){state.focus=i;rebuildFocus(f)}}});
 document.addEventListener('visibilitychange',function(){if(!state.player||state.player.html||!avAvailable())return;try{document.hidden?webapis.avplay.suspend():webapis.avplay.restore()}catch(e){console.warn(e)}});
 registerKeys();bindStatic();setInterval(function(){$('#clock').textContent=new Date().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})},1000);load();
 })();

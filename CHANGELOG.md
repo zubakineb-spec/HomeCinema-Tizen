@@ -10,6 +10,9 @@
 - Added subtitle enable/disable control and AVPlay multitasking suspend/restore handling.
 - Improved Samsung Smart Remote focus navigation and TV-first layout.
 - Added database tests for season grouping, search and continue-watching behavior.
+- Fixed Samsung remote focus after changing seasons and synchronized visual/DOM focus.
+- Added GitHub Actions CI for backend tests, compile checks and TV JavaScript syntax checks.
+- Added signed WGT build/install PowerShell scripts and Samsung Developer Mode setup guide.
 
 ## 0.1.0 - 2026-08-08
 
