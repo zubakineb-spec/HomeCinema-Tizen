@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.0 - 2026-08-08
+
+- Added TV search for movies and series.
+- Added "Продолжить просмотр" feed from local playback progress.
+- Added explicit season grouping and season tabs for series stored in folders.
+- Added episode cards with stills, descriptions, runtime and air date when TMDb provides them.
+- Added Samsung AVPlay audio/subtitle track panel using native track APIs.
+- Added subtitle enable/disable control and AVPlay multitasking suspend/restore handling.
+- Improved Samsung Smart Remote focus navigation and TV-first layout.
+- Added database tests for season grouping, search and continue-watching behavior.
+- Fixed Samsung remote focus after changing seasons and synchronized visual/DOM focus.
+- Added GitHub Actions CI for backend tests, compile checks and TV JavaScript syntax checks.
+- Added signed WGT build/install PowerShell scripts and Samsung Developer Mode setup guide.
+
 ## 0.1.0 - 2026-08-08
 
 - Initial Home Cinema MVP.

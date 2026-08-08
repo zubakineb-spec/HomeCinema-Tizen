@@ -23,6 +23,10 @@ class ParserTests(unittest.TestCase):
         x = parse_media_url(BASE + "Series/Sherlock/Sherlock.1x03.mkv", BASE)
         self.assertEqual((x.kind, x.show_title, x.season, x.episode), ("episode", "Sherlock", 1, 3))
 
+    def test_numeric_episode_with_title_in_season_folder(self):
+        x = parse_media_url(BASE + "Series/Fallout/Сезон%2001/01%20-%20Пилот.mkv", BASE)
+        self.assertEqual((x.kind, x.show_title, x.season, x.episode), ("episode", "Fallout", 1, 1))
+
 
 if __name__ == "__main__":
     unittest.main()

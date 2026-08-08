@@ -150,14 +150,47 @@ class Database:
             if not show:
                 return None
             result = dict(show)
-            eps = conn.execute("SELECT * FROM episodes WHERE show_id=? ORDER BY season,episode", (show_id,)).fetchall()
-            result["episodes"] = [dict(x) for x in eps]
+            eps = [dict(x) for x in conn.execute(
+                "SELECT * FROM episodes WHERE show_id=? ORDER BY season,episode", (show_id,)
+            ).fetchall()]
+            result["episodes"] = eps
+            seasons: list[dict[str, Any]] = []
+            for season_no in sorted({int(e["season"]) for e in eps}):
+                season_eps = [e for e in eps if int(e["season"]) == season_no]
+                seasons.append({"number": season_no, "episode_count": len(season_eps), "episodes": season_eps})
+            result["seasons"] = seasons
             return result
 
     def catalog(self):
         with self.connect() as conn:
             movies = [dict(x) for x in conn.execute("SELECT * FROM movies ORDER BY added_at DESC,title").fetchall()]
             shows = [dict(x) for x in conn.execute("SELECT * FROM shows ORDER BY added_at DESC,title").fetchall()]
+            for show in shows:
+                stats = conn.execute(
+                    "SELECT COUNT(*) c, COUNT(DISTINCT season) s FROM episodes WHERE show_id=?", (show["id"],)
+                ).fetchone()
+                show["episode_count"] = stats["c"]
+                show["season_count"] = stats["s"]
+            return {"movies": movies, "shows": shows}
+
+    def search(self, query: str, limit: int = 40):
+        text = (query or "").strip()
+        if not text:
+            return {"movies": [], "shows": []}
+        like = f"%{text}%"
+        with self.connect() as conn:
+            movies = [dict(x) for x in conn.execute(
+                """SELECT * FROM movies
+                   WHERE title LIKE ? COLLATE NOCASE OR original_title LIKE ? COLLATE NOCASE
+                   ORDER BY rating DESC,title LIMIT ?""",
+                (like, like, limit),
+            ).fetchall()]
+            shows = [dict(x) for x in conn.execute(
+                """SELECT * FROM shows
+                   WHERE title LIKE ? COLLATE NOCASE OR original_title LIKE ? COLLATE NOCASE
+                   ORDER BY rating DESC,title LIMIT ?""",
+                (like, like, limit),
+            ).fetchall()]
             for show in shows:
                 stats = conn.execute(
                     "SELECT COUNT(*) c, COUNT(DISTINCT season) s FROM episodes WHERE show_id=?", (show["id"],)
@@ -179,3 +212,32 @@ class Database:
         with self.connect() as conn:
             row = conn.execute("SELECT * FROM progress WHERE source_url=?", (source_url,)).fetchone()
             return dict(row) if row else {"source_url": source_url, "position_ms": 0, "duration_ms": 0, "completed": 0}
+
+    def continue_watching(self, limit: int = 20):
+        with self.connect() as conn:
+            movie_rows = conn.execute(
+                """SELECT 'movie' AS media_type,m.id,m.title,NULL AS parent_title,m.source_url,
+                          m.poster_url AS image_url,m.backdrop_url,p.position_ms,p.duration_ms,p.updated_at
+                   FROM progress p JOIN movies m ON m.source_url=p.source_url
+                   WHERE p.completed=0 AND p.position_ms>0 AND p.duration_ms>0 AND p.position_ms<p.duration_ms
+                   ORDER BY p.updated_at DESC LIMIT ?""",
+                (limit,),
+            ).fetchall()
+            episode_rows = conn.execute(
+                """SELECT 'episode' AS media_type,e.id,e.title,s.title AS parent_title,e.source_url,
+                          COALESCE(e.still_url,s.backdrop_url,s.poster_url) AS image_url,s.backdrop_url,
+                          p.position_ms,p.duration_ms,p.updated_at,e.season,e.episode,s.id AS show_id
+                   FROM progress p
+                   JOIN episodes e ON e.source_url=p.source_url
+                   JOIN shows s ON s.id=e.show_id
+                   WHERE p.completed=0 AND p.position_ms>0 AND p.duration_ms>0 AND p.position_ms<p.duration_ms
+                   ORDER BY p.updated_at DESC LIMIT ?""",
+                (limit,),
+            ).fetchall()
+            items = [dict(x) for x in movie_rows] + [dict(x) for x in episode_rows]
+            items.sort(key=lambda x: x.get("updated_at") or "", reverse=True)
+            for item in items:
+                duration = int(item.get("duration_ms") or 0)
+                position = int(item.get("position_ms") or 0)
+                item["progress_percent"] = round(position * 100 / duration, 1) if duration else 0
+            return items[:limit]
