@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.8 - 2026-08-09
+
+- Added application-level TMDB DNS recovery for networks where `api.themoviedb.org` is incorrectly resolved to a local address.
+- Normal system DNS remains the first path; on transport/TLS failure the client retries resolution over HTTPS using Cloudflare and Google Public DNS bootstrap addresses.
+- Added a final set of public TMDB CDN seed addresses for recovery when encrypted DNS itself is unavailable; stale or hijacked addresses remain harmless because normal hostname TLS certificate verification is still mandatory.
+- Rejects loopback, RFC1918, link-local, CGNAT and multicast DNS answers from the fallback path.
+- Added regression tests proving fallback activation, host scoping, HTTP-error preservation and that TLS verification is never disabled.
+
 ## 0.3.7 - 2026-08-09
 
 - Reclassified the target-library `Pasha S01E09` file as the local extra `Фильм о фильме` instead of a ninth episode.
