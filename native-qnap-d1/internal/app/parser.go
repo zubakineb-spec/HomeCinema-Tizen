@@ -14,8 +14,9 @@ var seasonDir = regexp.MustCompile(`(?i)^(?:season|сезон)[ ._\-]*([0-9]{1,2
 var seasonS = regexp.MustCompile(`(?i)^s([0-9]{1,2})$`)
 var numericEp = regexp.MustCompile(`(?i)^(?:e|ep|episode|серия)?[ ._\-]*([0-9]{1,3})(?:\D.*)?$`)
 var yearRe = regexp.MustCompile(`(?:19|20)[0-9]{2}`)
-var qualityRe = regexp.MustCompile(`(?i)\b(?:2160p|1080p|720p|480p|4k|uhd|hdr10\+?|hdr|dv|dolby[ ._\-]?vision|bluray|blu[ ._\-]?ray|bdrip|webrip|web[ ._\-]?dl|remux|h\.?26[45]|hevc|x26[45]|aac|ac3|eac3|dts(?:-hd)?|truehd|atmos|proper|repack|extended|multi)\b.*$`)
+var qualityRe = regexp.MustCompile(`(?i)\b(?:2160p|1080p|720p|480p|4k|uhd|hdr10\+?|hdr|dv|dolby[ ._\-]?vision|bluray|blu[ ._\-]?ray|bdrip|webrip|web[ ._\-]?dl|dcprip|dcp|remux|amzn|netflix|nf|dsnp|hmax|atvp|h\.?26[45]|hevc|x26[45]|aac|ac3|eac3|dts(?:-hd)?|truehd|atmos|proper|repack|extended)\b.*$`)
 var seasonSuffix = regexp.MustCompile(`(?i)(?:^|[ ._\-])(?:s[0-9]{1,2}|season[ ._\-]*[0-9]{1,2}|сезон[ ._\-]*[0-9]{1,2})\b.*$`)
+var trailingReleaseTag = regexp.MustCompile(`(?i)(?:[ ._\-]+)(?:ma)$`)
 
 type Parsed struct {
 	Kind, Title, ShowTitle string
@@ -37,6 +38,9 @@ func cleanTitle(s string) string {
 		s = strings.TrimSuffix(s, filepath.Ext(s))
 	}
 	s = qualityRe.ReplaceAllString(s, "")
+	for trailingReleaseTag.MatchString(s) {
+		s = trailingReleaseTag.ReplaceAllString(s, "")
+	}
 	s = strings.NewReplacer(".", " ", "_", " ", "–", " ", "—", " ").Replace(s)
 	s = strings.Join(strings.Fields(s), " ")
 	return strings.Trim(s, " ._-")
