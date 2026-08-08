@@ -1,14 +1,31 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
+from urllib.parse import quote, urljoin
 from .crawler import crawl_http_directory
 from .parser import parse_media_url
 from .db import Database
 from .tmdb import TmdbClient
 
 
-async def scan_library(db: Database, tmdb: TmdbClient, base_url: str, max_depth: int, timeout: int):
-    urls = await crawl_http_directory(base_url, max_depth=max_depth, timeout=timeout)
+def _crawl_local_directory(root: Path, base_url: str) -> list[str]:
+    urls: list[str] = []
+    if not root.exists():
+        return urls
+    for path in root.rglob("*"):
+        if not path.is_file():
+            continue
+        rel = path.relative_to(root).as_posix()
+        urls.append(urljoin(base_url.rstrip("/") + "/", quote(rel, safe="/")))
+    return urls
+
+
+async def scan_library(db: Database, tmdb: TmdbClient, base_url: str, max_depth: int, timeout: int, local_root: Path | None = None):
+    if local_root is not None:
+        urls = _crawl_local_directory(local_root, base_url)
+    else:
+        urls = await crawl_http_directory(base_url, max_depth=max_depth, timeout=timeout)
     movies: list[tuple[int, str, int | None]] = []
     shows: dict[int, dict] = {}
     ignored = 0

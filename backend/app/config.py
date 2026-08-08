@@ -17,6 +17,7 @@ def _int(name: str, default: int) -> int:
 @dataclass(frozen=True)
 class Settings:
     media_base_url: str = os.getenv("MEDIA_BASE_URL", "http://192.168.0.101/").rstrip("/") + "/"
+    media_local_root: Path | None = Path(os.getenv("MEDIA_LOCAL_ROOT")).resolve() if os.getenv("MEDIA_LOCAL_ROOT", "").strip() else None
     tmdb_bearer_token: str = os.getenv("TMDB_BEARER_TOKEN", "").strip()
     app_host: str = os.getenv("APP_HOST", "0.0.0.0")
     app_port: int = _int("APP_PORT", 8096)
