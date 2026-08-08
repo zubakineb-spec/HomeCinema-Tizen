@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from pathlib import Path
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -12,12 +12,14 @@ from .config import settings
 from .db import Database
 from .scanner import scan_library
 from .tmdb import TmdbClient
+from .playback import PlaybackResolver
 
 ROOT = Path(__file__).resolve().parents[2]
 TV_APP = ROOT / "tv-app"
 
 db = Database(settings.database_path)
 tmdb = TmdbClient(settings.tmdb_bearer_token, settings.scan_request_timeout)
+playback = PlaybackResolver(settings.hls_cache_dir, settings.ffmpeg_path, settings.ffprobe_path, settings.media_base_url)
 app = FastAPI(title="Home Cinema", version=__version__)
 app.add_middleware(
     CORSMiddleware,
@@ -36,7 +38,9 @@ class ProgressIn(BaseModel):
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": __version__, "media_base_url": settings.media_base_url, "tmdb": tmdb.enabled}
+    return {"status": "ok", "version": __version__, "media_base_url": settings.media_base_url, "tmdb": tmdb.enabled,
+            "target_tv": "Samsung UE49NU7500U", "tizen": "4.0",
+            "ffmpeg": playback.ffmpeg_available, "ffprobe": playback.ffprobe_available}
 
 
 @app.post("/api/scan")
@@ -75,19 +79,53 @@ def show(show_id: int):
     return item
 
 
+@app.get("/api/playback/resolve")
+def resolve_playback(request: Request, source_url: str = Query(..., max_length=4096)):
+    public_hls_base = str(request.base_url).rstrip("/") + "/hls"
+    try:
+        return playback.resolve(source_url, public_hls_base)
+    except ValueError:
+        raise HTTPException(400, "Media source is outside MEDIA_BASE_URL")
+
+
+@app.get("/api/playback/smart")
+def smart_playback(request: Request, source_url: str = Query(..., max_length=4096)):
+    public_hls_base = str(request.base_url).rstrip("/") + "/hls"
+    try:
+        resolved = playback.resolve(source_url, public_hls_base)
+    except ValueError:
+        raise HTTPException(400, "Media source is outside MEDIA_BASE_URL")
+    return RedirectResponse(resolved["play_url"], status_code=307)
+
+
+def _original_source_url(value: str) -> str:
+    from urllib.parse import parse_qs, urlparse
+    try:
+        parsed = urlparse(value)
+        if parsed.path.endswith("/api/playback/smart"):
+            source = parse_qs(parsed.query).get("source_url", [])
+            if source:
+                return source[0]
+    except Exception:
+        pass
+    return value
+
+
 @app.post("/api/progress")
 def save_progress(data: ProgressIn):
-    db.set_progress(data.source_url, data.position_ms, data.duration_ms, data.completed)
+    db.set_progress(_original_source_url(data.source_url), data.position_ms, data.duration_ms, data.completed)
     return {"ok": True}
 
 
 @app.get("/api/progress")
 def progress(source_url: str):
-    return db.get_progress(source_url)
+    return db.get_progress(_original_source_url(source_url))
 
 
 app.mount("/css", StaticFiles(directory=TV_APP / "css"), name="css")
 app.mount("/js", StaticFiles(directory=TV_APP / "js"), name="js")
+settings.hls_cache_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/hls", StaticFiles(directory=settings.hls_cache_dir), name="hls")
 
 
 @app.get("/")

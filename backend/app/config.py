@@ -24,6 +24,9 @@ class Settings:
     image_cache_dir: Path = Path(os.getenv("IMAGE_CACHE_DIR", "./data/images"))
     scan_max_depth: int = _int("SCAN_MAX_DEPTH", 8)
     scan_request_timeout: int = _int("SCAN_REQUEST_TIMEOUT", 12)
+    ffmpeg_path: str = os.getenv("FFMPEG_PATH", "ffmpeg").strip() or "ffmpeg"
+    ffprobe_path: str = os.getenv("FFPROBE_PATH", "ffprobe").strip() or "ffprobe"
+    hls_cache_dir: Path = Path(os.getenv("HLS_CACHE_DIR", "./data/hls"))
 
 
 settings = Settings()
