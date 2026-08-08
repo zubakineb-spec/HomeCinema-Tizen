@@ -56,13 +56,13 @@ func newTMDBHTTPClient() *http.Client {
 			resolver:      newDoHResolver(),
 			directFactory: newDirectHostTransport,
 		},
-		Timeout: 18 * time.Second,
+		Timeout: 20 * time.Second,
 	}
 }
 
 func newDoHResolver() *dohResolver {
 	return &dohResolver{
-		timeout: 8 * time.Second,
+		timeout: 3 * time.Second,
 		providers: []dohProvider{
 			{name: "cloudflare", host: "cloudflare-dns.com", bootstrap: []string{"1.1.1.1", "1.0.0.1"}, path: "/dns-query"},
 			{name: "google", host: "dns.google", bootstrap: []string{"8.8.8.8", "8.8.4.4"}, path: "/resolve"},
@@ -106,7 +106,7 @@ func (r *dohResolver) resolveProvider(ctx context.Context, p dohProvider, host s
 
 	timeout := r.timeout
 	if timeout <= 0 {
-		timeout = 8 * time.Second
+		timeout = 3 * time.Second
 	}
 	client := &http.Client{Transport: newBootstrapTransport(p), Timeout: timeout}
 	resp, err := client.Do(req)
@@ -160,7 +160,7 @@ func (r *dohResolver) resolveProvider(ctx context.Context, p dohProvider, host s
 }
 
 func newBootstrapTransport(p dohProvider) *http.Transport {
-	d := &net.Dialer{Timeout: 4 * time.Second, KeepAlive: -1}
+	d := &net.Dialer{Timeout: 3 * time.Second, KeepAlive: -1}
 	return &http.Transport{
 		Proxy: nil,
 		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
@@ -182,13 +182,13 @@ func newBootstrapTransport(p dohProvider) *http.Transport {
 		},
 		ForceAttemptHTTP2:   false,
 		DisableKeepAlives:   true,
-		TLSHandshakeTimeout: 5 * time.Second,
+		TLSHandshakeTimeout: 3 * time.Second,
 		TLSClientConfig:     &tls.Config{MinVersion: tls.VersionTLS12},
 	}
 }
 
 func newDirectHostTransport(host, ip string) http.RoundTripper {
-	d := &net.Dialer{Timeout: 5 * time.Second, KeepAlive: -1}
+	d := &net.Dialer{Timeout: 4 * time.Second, KeepAlive: -1}
 	return &http.Transport{
 		Proxy: nil,
 		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
@@ -200,7 +200,7 @@ func newDirectHostTransport(host, ip string) http.RoundTripper {
 		},
 		ForceAttemptHTTP2:   false,
 		DisableKeepAlives:   true,
-		TLSHandshakeTimeout: 5 * time.Second,
+		TLSHandshakeTimeout: 4 * time.Second,
 		TLSClientConfig:     &tls.Config{MinVersion: tls.VersionTLS12},
 	}
 }
