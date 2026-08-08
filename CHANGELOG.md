@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.1 - 2026-08-08
+
+- Added an in-app Credits/About screen for TMDB attribution.
+- Added the required TMDB API non-endorsement notice.
+- Documented that an approved TMDB logo asset must be used before redistribution.
+- Kept the home-cinema runtime and media catalog behavior unchanged from 0.2.0.
+
 ## 0.2.0 - 2026-08-08
 
 - Added TV search for movies and series.
