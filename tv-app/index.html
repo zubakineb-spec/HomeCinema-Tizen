@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=1920, initial-scale=1, maximum-scale=1" />
+  <title>Home Cinema</title>
+  <script type="text/javascript" src="$WEBAPIS/webapis/webapis.js"></script>
+  <link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+  <div id="app">
+    <header>
+      <div class="brand"><span class="mark">HC</span><span>HOME CINEMA</span></div>
+      <nav><span class="active">Главная</span><span>Фильмы</span><span>Сериалы</span><span>Поиск</span></nav>
+      <div id="clock"></div>
+    </header>
+    <main>
+      <section id="hero" class="hero">
+        <div class="shade"></div>
+        <div class="hero-content">
+          <div class="eyebrow">МОЯ МЕДИАТЕКА</div>
+          <h1 id="heroTitle">Домашний кинотеатр</h1>
+          <div id="heroMeta" class="hero-meta">Samsung Tizen • локальная медиатека</div>
+          <p id="heroOverview">Фильмы и сериалы с вашего домашнего сервера — без рекламы и подписок.</p>
+          <button id="heroPlay" class="focusable primary" data-action="hero-play">▶ Смотреть</button>
+        </div>
+      </section>
+      <section id="continueSection" class="shelf hidden"><h2>Продолжить просмотр</h2><div class="row" id="continueRow"></div></section>
+      <section class="shelf"><h2>Новое в медиатеке</h2><div class="row" id="movieRow"></div></section>
+      <section class="shelf"><h2>Сериалы</h2><div class="row" id="showRow"></div></section>
+      <section id="empty" class="empty hidden"><h2>Медиатека пока пуста</h2><p>Просканируйте `192.168.0.101` и соберите каталог фильмов и сериалов.</p><button id="scanButton" class="focusable primary">⟳ Сканировать медиатеку</button></section>
+    </main>
+    <div id="details" class="overlay hidden"></div>
+    <div id="player" class="player hidden">
+      <object id="avplay" type="application/avplayer"></object>
+      <video id="htmlVideo" playsinline></video>
+      <div class="player-ui"><div id="playerTitle"></div><div id="playerState">▶</div><div class="progress"><span id="playerProgress"></span></div></div>
+    </div>
+    <div id="toast" class="toast hidden"></div>
+  </div>
+  <script src="js/config.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
