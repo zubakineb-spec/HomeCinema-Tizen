@@ -74,7 +74,7 @@ case "${1:-start}" in
     if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE" 2>/dev/null)" 2>/dev/null; then exit 0; fi
     mkdir -p "$HC_DATA_DIR" "$HC_DATA_DIR/hls"
     cd "$APPDIR" || exit 1
-    "$APPDIR/homecinema-d1" >>"$LOGFILE" 2>&1 </dev/null &
+    ( trap '' HUP; exec "$APPDIR/homecinema-d1" >>"$LOGFILE" 2>&1 </dev/null ) &
     echo $! > "$PIDFILE"
     ;;
   stop)
