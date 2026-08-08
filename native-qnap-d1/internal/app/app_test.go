@@ -19,6 +19,18 @@ func TestParseSeriesSeason(t *testing.T) {
 		t.Fatalf("%+v", p)
 	}
 }
+func TestParseSeriesDottedEpisodeAndReleaseDir(t *testing.T) {
+	p, ok := ParseMedia("The.Dark.S01.2026.WEB-DL.1080p.ExKinoRay/The.Dark.S01.E05.2026.WEB-DL.1080p.ExKinoRay.mkv")
+	if !ok || p.Kind != "episode" || p.ShowTitle != "The Dark" || p.Season != 1 || p.Episode != 5 {
+		t.Fatalf("%+v", p)
+	}
+}
+func TestParseSeriesReleaseDirectoryTitle(t *testing.T) {
+	p, ok := ParseMedia("After Life S01 (1080p)/After.Life.2019.S01E02.1080p.WEB-DL.KvK.mkv")
+	if !ok || p.Kind != "episode" || p.ShowTitle != "After Life" || p.Season != 1 || p.Episode != 2 {
+		t.Fatalf("%+v", p)
+	}
+}
 func TestParseSeriesNumeric(t *testing.T) {
 	p, ok := ParseMedia("Series/Игра престолов/Сезон 02/03.mkv")
 	if !ok || p.ShowTitle != "Игра престолов" || p.Season != 2 || p.Episode != 3 {
@@ -49,5 +61,25 @@ func TestScanBuildsPublicURL(t *testing.T) {
 	u, err := url.Parse(e[0].SourceURL)
 	if err != nil || u.Path != "/media/Series/Fallout/Season 01/01.mkv" {
 		t.Fatalf("%s %v", e[0].SourceURL, err)
+	}
+}
+func TestScanSkipsQNAPThumbDirectories(t *testing.T) {
+	root := t.TempDir()
+	d := filepath.Join(root, "After Life S01 (1080p)")
+	thumb := filepath.Join(d, ".@__thumb")
+	if e := os.MkdirAll(thumb, 0755); e != nil {
+		t.Fatal(e)
+	}
+	name := "After.Life.2019.S01E01.1080p.WEB-DL.KvK.mkv"
+	if e := os.WriteFile(filepath.Join(d, name), []byte("x"), 0644); e != nil {
+		t.Fatal(e)
+	}
+	if e := os.WriteFile(filepath.Join(thumb, "s800"+name), []byte("x"), 0644); e != nil {
+		t.Fatal(e)
+	}
+	cfg := Config{MediaRoot: root, MediaBaseURL: "http://192.168.0.101:8096/media/"}
+	m, s, e, err := ScanLocal(cfg)
+	if err != nil || len(m) != 0 || len(s) != 1 || len(e) != 1 {
+		t.Fatalf("err=%v movies=%d shows=%d episodes=%d", err, len(m), len(s), len(e))
 	}
 }
