@@ -8,6 +8,7 @@ import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import unquote, urlsplit
 from typing import Any
 
 SAMSUNG_2018_AUDIO = {
@@ -61,12 +62,13 @@ class HlsJob:
 
 
 class PlaybackResolver:
-    def __init__(self, cache_dir: Path, ffmpeg_path: str = "ffmpeg", ffprobe_path: str = "ffprobe", allowed_base_url: str = ""):
+    def __init__(self, cache_dir: Path, ffmpeg_path: str = "ffmpeg", ffprobe_path: str = "ffprobe", allowed_base_url: str = "", local_root: Path | None = None):
         self.cache_dir = cache_dir
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.ffmpeg_path = ffmpeg_path
         self.ffprobe_path = ffprobe_path
         self.allowed_base_url = allowed_base_url.rstrip("/") + "/" if allowed_base_url else ""
+        self.local_root = local_root.resolve() if local_root else None
         self._jobs: dict[str, HlsJob] = {}
         self._lock = threading.Lock()
 
@@ -81,6 +83,24 @@ class PlaybackResolver:
     def source_allowed(self, source_url: str) -> bool:
         return bool(source_url) and (not self.allowed_base_url or source_url.startswith(self.allowed_base_url))
 
+    def input_source(self, source_url: str) -> str:
+        if not self.source_allowed(source_url) or self.local_root is None:
+            return source_url
+        base = urlsplit(self.allowed_base_url)
+        source = urlsplit(source_url)
+        if (source.scheme, source.netloc) != (base.scheme, base.netloc):
+            return source_url
+        base_path = base.path.rstrip("/") + "/"
+        if not source.path.startswith(base_path):
+            return source_url
+        rel = unquote(source.path[len(base_path):]).lstrip("/")
+        candidate = (self.local_root / rel).resolve()
+        try:
+            candidate.relative_to(self.local_root)
+        except ValueError:
+            raise ValueError("source_not_allowed")
+        return str(candidate)
+
     def probe(self, source_url: str, timeout: int = 15) -> dict[str, Any]:
         if not self.source_allowed(source_url):
             return {"available": False, "reason": "source_not_allowed"}
@@ -89,7 +109,7 @@ class PlaybackResolver:
         cmd = [
             self.ffprobe_path, "-v", "error",
             "-show_entries", "stream=index,codec_type,codec_name,channels:format=duration",
-            "-of", "json", source_url,
+            "-of", "json", self.input_source(source_url),
         ]
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, check=False)
@@ -151,7 +171,7 @@ class PlaybackResolver:
             segment_pattern = str(directory / "seg%06d.ts")
             cmd = [
                 self.ffmpeg_path, "-nostdin", "-hide_banner", "-loglevel", "warning", "-y",
-                "-i", source_url,
+                "-i", self.input_source(source_url),
                 "-map", "0:v:0", "-map", "0:a:0",
                 "-sn", "-dn",
                 "-c:v", "copy",
@@ -165,6 +185,7 @@ class PlaybackResolver:
             process = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=log_file)
             job = HlsJob(key=key, directory=directory, playlist=playlist, process=process, log_path=log_path)
             self._jobs[key] = job
+        # Give FFmpeg a short head start. The endpoint must remain responsive even for slow NAS links.
         deadline = time.monotonic() + 3.0
         while time.monotonic() < deadline:
             if playlist.exists() and any(directory.glob("seg*.ts")):

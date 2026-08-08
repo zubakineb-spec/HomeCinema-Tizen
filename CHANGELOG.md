@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.1 - 2026-08-08
+
+- Added NAS-first deployment: backend runs directly on the NAS.
+- Added `MEDIA_LOCAL_ROOT` for local filesystem scanning and FFmpeg/ffprobe input.
+- Kept `MEDIA_BASE_URL` as the public Direct Play URL used by Samsung TV.
+- Added Dockerfile, NAS Compose deployment and persistent data/HLS volumes.
+
 ## 0.3.0 - 2026-08-08
 
 - Target hardware profile: Samsung UE49NU7500U (2018, Tizen 4.0 / Chromium M56).

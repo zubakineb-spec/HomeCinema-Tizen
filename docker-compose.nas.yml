@@ -1,0 +1,19 @@
+services:
+  home-cinema:
+    build: .
+    container_name: home-cinema
+    restart: unless-stopped
+    ports:
+      - "8096:8096"
+    environment:
+      MEDIA_BASE_URL: "${MEDIA_BASE_URL:-http://192.168.0.101/}"
+      MEDIA_LOCAL_ROOT: /media
+      TMDB_BEARER_TOKEN: "${TMDB_BEARER_TOKEN:-}"
+      DATABASE_PATH: /data/home_cinema.db
+      IMAGE_CACHE_DIR: /data/images
+      HLS_CACHE_DIR: /data/hls
+      FFMPEG_PATH: ffmpeg
+      FFPROBE_PATH: ffprobe
+    volumes:
+      - "${NAS_MEDIA_PATH:-/volume1/media}:/media:ro"
+      - "${NAS_APP_DATA:-./data}:/data"
