@@ -33,7 +33,9 @@ func seasonNo(s string) int {
 	return -1
 }
 func cleanTitle(s string) string {
-	s = strings.TrimSuffix(s, filepath.Ext(s))
+	if ext := strings.ToLower(filepath.Ext(s)); videoExt[ext] {
+		s = strings.TrimSuffix(s, filepath.Ext(s))
+	}
 	s = qualityRe.ReplaceAllString(s, "")
 	s = strings.NewReplacer(".", " ", "_", " ", "–", " ", "—", " ").Replace(s)
 	s = strings.Join(strings.Fields(s), " ")
