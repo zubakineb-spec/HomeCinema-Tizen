@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.2 - 2026-08-08
+
+- Added native QNAP D1 runtime for ARMv7 / QTS 4.3.6 without Docker or Python.
+- Added statically linked ARMv7 Go backend with local media scan, catalog, search, series seasons, progress and TMDB metadata.
+- Added native `/media/` HTTP serving with byte-range support for Samsung Direct Play.
+- Added QTS service registration and SSH installer/preflight/uninstaller scripts.
+- Split catalog and playback progress persistence to reduce write load on the 1 GB D1.
+- Added optional ffprobe/FFmpeg DTS fallback; disabled by default on D1 to protect CPU headroom.
+- Added GitHub CI ARMv7 cross-build and install-bundle artifact.
+
 ## 0.3.1 - 2026-08-08
 
 - Added NAS-first deployment: backend runs directly on the NAS.
