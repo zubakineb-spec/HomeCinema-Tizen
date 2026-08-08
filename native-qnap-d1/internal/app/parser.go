@@ -70,6 +70,15 @@ func showTitleFromEpisode(stem string, dirs []string, sdIdx int, re *regexp.Rege
 	}
 	return "Неизвестный сериал"
 }
+func episodeParsed(show string, season, episode int) Parsed {
+	kind := "episode"
+	title := "Серия " + strconv.Itoa(episode)
+	if localKind, localTitle, ok := localEpisodeOverride(show, season, episode); ok {
+		kind = localKind
+		title = localTitle
+	}
+	return Parsed{Kind: kind, Title: title, ShowTitle: show, Season: season, Episode: episode}
+}
 func ParseMedia(rel string) (Parsed, bool) {
 	ext := strings.ToLower(filepath.Ext(rel))
 	if !videoExt[ext] {
@@ -101,7 +110,7 @@ func ParseMedia(rel string) (Parsed, bool) {
 		s, _ := strconv.Atoi(sm[1])
 		e, _ := strconv.Atoi(sm[2])
 		show := showTitleFromEpisode(stem, dirs, sdIdx, episodeRe)
-		return Parsed{Kind: "episode", Title: "Серия " + strconv.Itoa(e), ShowTitle: show, Season: s, Episode: e}, true
+		return episodeParsed(show, s, e), true
 	}
 	if sdIdx >= 0 {
 		if m := numericEp.FindStringSubmatch(stem); len(m) > 1 {
@@ -112,7 +121,7 @@ func ParseMedia(rel string) (Parsed, bool) {
 					show = title
 				}
 			}
-			return Parsed{Kind: "episode", Title: "Серия " + strconv.Itoa(e), ShowTitle: show, Season: sd, Episode: e}, true
+			return episodeParsed(show, sd, e), true
 		}
 	}
 	title := cleanTitle(file)
