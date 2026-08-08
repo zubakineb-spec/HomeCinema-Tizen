@@ -28,7 +28,7 @@ type TMDB struct {
 func NewTMDB(token string) *TMDB {
 	return &TMDB{
 		token:     strings.TrimSpace(token),
-		client:    &http.Client{Timeout: 12 * time.Second},
+		client:    newTMDBHTTPClient(),
 		baseURL:   tmdbAPIBaseURL,
 		retryBase: 500 * time.Millisecond,
 	}
@@ -63,7 +63,7 @@ func (t *TMDB) get(path string, q url.Values, out any) error {
 	u := base + path
 	if len(q) > 0 { u += "?" + q.Encode() }
 	client := t.client
-	if client == nil { client = &http.Client{Timeout: 12 * time.Second} }
+	if client == nil { client = newTMDBHTTPClient() }
 
 	var lastErr error
 	for attempt := 1; attempt <= 3; attempt++ {
