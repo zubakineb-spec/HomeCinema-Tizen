@@ -13,6 +13,28 @@ func TestParseMovie(t *testing.T) {
 		t.Fatalf("%+v %v", p, ok)
 	}
 }
+func TestParseRealMovieReleaseNames(t *testing.T) {
+	tests := []struct {
+		path  string
+		title string
+		year  int
+	}{
+		{"Evil.Dead.Burn.2026.MA.x264.WEB-DL.1080p.mkv", "Evil Dead Burn", 2026},
+		{"Proisshestvie.v.strane.Multi-Pulti.2022.WEBRip.1080p.mkv", "Proisshestvie v strane Multi-Pulti", 2022},
+		{"Rio.de.Sangue.2026.1080p.WEB-DL.H264_il68k.mkv", "Rio de Sangue", 2026},
+		{"Scary Movie.2026.DCPRip.H264.2.0.mkv", "Scary Movie", 2026},
+		{"Soulm8te.1080p.mkv", "Soulm8te", 0},
+		{"Tchaikovsky The Nutcracker  Mariinsky Gergiev (2012) 720p BDRip/Tchaikovsky_The.Nutcracker_Mariinsky.Theatre_Gergiev.2012.BDRip.720p.mkv", "Tchaikovsky The Nutcracker Mariinsky Theatre Gergiev", 2012},
+		{"The.Sheep.Detectives.2026.1080p.AMZN.WEB-DL.H.264-EniaHD.mkv", "The Sheep Detectives", 2026},
+		{"Tuner.2025.1080p.WEB.H.264.mkv", "Tuner", 2025},
+	}
+	for _, tc := range tests {
+		p, ok := ParseMedia(tc.path)
+		if !ok || p.Kind != "movie" || p.Title != tc.title || p.Year != tc.year {
+			t.Errorf("%s => %+v ok=%v; want title=%q year=%d", tc.path, p, ok, tc.title, tc.year)
+		}
+	}
+}
 func TestParseSeriesSeason(t *testing.T) {
 	p, ok := ParseMedia("Series/Fallout/Season 01/Fallout.S01E02.2160p.mkv")
 	if !ok || p.Kind != "episode" || p.ShowTitle != "Fallout" || p.Season != 1 || p.Episode != 2 {
