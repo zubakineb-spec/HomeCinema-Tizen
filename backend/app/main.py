@@ -19,7 +19,7 @@ TV_APP = ROOT / "tv-app"
 
 db = Database(settings.database_path)
 tmdb = TmdbClient(settings.tmdb_bearer_token, settings.scan_request_timeout)
-playback = PlaybackResolver(settings.hls_cache_dir, settings.ffmpeg_path, settings.ffprobe_path, settings.media_base_url)
+playback = PlaybackResolver(settings.hls_cache_dir, settings.ffmpeg_path, settings.ffprobe_path, settings.media_base_url, settings.media_local_root)
 app = FastAPI(title="Home Cinema", version=__version__)
 app.add_middleware(
     CORSMiddleware,
@@ -40,12 +40,14 @@ class ProgressIn(BaseModel):
 def health():
     return {"status": "ok", "version": __version__, "media_base_url": settings.media_base_url, "tmdb": tmdb.enabled,
             "target_tv": "Samsung UE49NU7500U", "tizen": "4.0",
-            "ffmpeg": playback.ffmpeg_available, "ffprobe": playback.ffprobe_available}
+            "ffmpeg": playback.ffmpeg_available, "ffprobe": playback.ffprobe_available,
+            "media_local_root": str(settings.media_local_root) if settings.media_local_root else None,
+            "deployment": "nas" if settings.media_local_root else "http"}
 
 
 @app.post("/api/scan")
 async def scan():
-    return await scan_library(db, tmdb, settings.media_base_url, settings.scan_max_depth, settings.scan_request_timeout)
+    return await scan_library(db, tmdb, settings.media_base_url, settings.scan_max_depth, settings.scan_request_timeout, settings.media_local_root)
 
 
 @app.get("/api/catalog")
