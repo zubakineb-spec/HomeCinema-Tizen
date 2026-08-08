@@ -2,7 +2,7 @@
 set -eu
 
 APP=HomeCinemaD1
-VERSION=0.3.3
+VERSION=0.3.4
 QPKG_CONF=/etc/config/qpkg.conf
 BASE_DIR="$(cd "$(dirname "$0")" 2>/dev/null && pwd)"
 
