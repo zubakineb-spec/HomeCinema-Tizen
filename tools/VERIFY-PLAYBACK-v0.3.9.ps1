@@ -9,12 +9,53 @@ function Assert-True {
     if (-not $Condition) { throw "FAIL: $Message" }
 }
 
+function Get-JsonDirect {
+    param([string]$Url)
+
+    $lastError = $null
+    for ($attempt = 1; $attempt -le 3; $attempt++) {
+        $resp = $null
+        $reader = $null
+        try {
+            $req = [System.Net.HttpWebRequest]::Create($Url)
+            $req.Method = "GET"
+            $req.Proxy = $null
+            $req.KeepAlive = $false
+            $req.Timeout = 15000
+            $req.ReadWriteTimeout = 15000
+            $req.UserAgent = "HomeCinema-Acceptance/0.3.9"
+
+            $resp = [System.Net.HttpWebResponse]$req.GetResponse()
+            if ([int]$resp.StatusCode -ne 200) {
+                throw "HTTP $([int]$resp.StatusCode) from $Url"
+            }
+
+            $reader = New-Object System.IO.StreamReader($resp.GetResponseStream(), [System.Text.Encoding]::UTF8)
+            $text = $reader.ReadToEnd()
+            return ($text | ConvertFrom-Json)
+        }
+        catch {
+            $lastError = $_
+            if ($attempt -lt 3) { Start-Sleep -Milliseconds (500 * $attempt) }
+        }
+        finally {
+            if ($null -ne $reader) { $reader.Close() }
+            if ($null -ne $resp) { $resp.Close() }
+        }
+    }
+
+    throw "Direct LAN GET failed after 3 attempts: $Url ; $($lastError.Exception.Message)"
+}
+
 function Test-Range {
     param([string]$Url)
     $req = [System.Net.HttpWebRequest]::Create($Url)
     $req.Method = "GET"
+    $req.Proxy = $null
+    $req.KeepAlive = $false
     $req.AddRange(0, 1023)
     $req.Timeout = 15000
+    $req.ReadWriteTimeout = 15000
     $resp = $null
     try {
         $resp = [System.Net.HttpWebResponse]$req.GetResponse()
@@ -38,13 +79,14 @@ function Confirm-Step {
 }
 
 Write-Host "=== HOME CINEMA NAS PLAYBACK ACCEPTANCE ==="
+Write-Host "API transport: direct LAN, proxy disabled, keep-alive disabled"
 
-$health = Invoke-RestMethod "$BaseUrl/api/health"
+$health = Get-JsonDirect "$BaseUrl/api/health"
 Assert-True ($health.status -eq "ok") "Home Cinema health is not ok"
 Assert-True ($health.version -eq "0.3.8") "Expected runtime version 0.3.8"
 Assert-True ([bool]$health.tmdb) "TMDb is disabled"
 
-$c = Invoke-RestMethod "$BaseUrl/api/catalog"
+$c = Get-JsonDirect "$BaseUrl/api/catalog"
 Assert-True ($c.movies.Count -ge 1) "No movies in catalog"
 Assert-True ($c.shows.Count -ge 1) "No shows in catalog"
 
@@ -54,14 +96,14 @@ $movie = $movie[0]
 
 $after = @($c.shows | Where-Object { $_.title -eq "After Life" } | Select-Object -First 1)
 Assert-True ($after.Count -eq 1) "After Life was not found"
-$afterDetails = Invoke-RestMethod "$BaseUrl/api/shows/$($after[0].id)"
+$afterDetails = Get-JsonDirect "$BaseUrl/api/shows/$($after[0].id)"
 $episode = @($afterDetails.episodes | Sort-Object season,episode | Select-Object -First 1)
 Assert-True ($episode.Count -eq 1) "No After Life episode found"
 $episode = $episode[0]
 
 $pasha = @($c.shows | Where-Object { $_.title -eq "Pasha" } | Select-Object -First 1)
 Assert-True ($pasha.Count -eq 1) "Pasha was not found"
-$pashaDetails = Invoke-RestMethod "$BaseUrl/api/shows/$($pasha[0].id)"
+$pashaDetails = Get-JsonDirect "$BaseUrl/api/shows/$($pasha[0].id)"
 $extra = @($pashaDetails.extras | Where-Object { $_.title -eq "Фильм о фильме" } | Select-Object -First 1)
 Assert-True ($extra.Count -eq 1) "Pasha extra 'Фильм о фильме' was not found"
 $extra = $extra[0]
