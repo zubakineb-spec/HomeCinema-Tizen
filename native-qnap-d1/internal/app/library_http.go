@@ -21,6 +21,9 @@ func (s *Server) scan(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) scanLibrary() (map[string]any, error) {
+	s.scanMu.Lock()
+	defer s.scanMu.Unlock()
+
 	m, sh, ep, err := ScanLocal(s.cfg)
 	if err != nil {
 		return nil, err
