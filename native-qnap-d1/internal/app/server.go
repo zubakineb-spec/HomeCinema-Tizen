@@ -61,6 +61,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/api/continue", s.continueWatching)
 	s.mux.HandleFunc("/api/movies/", s.movie)
 	s.mux.HandleFunc("/api/shows/", s.show)
+	s.mux.HandleFunc("/api/metadata/refresh-titles", s.refreshRecognizedTitles)
 	s.mux.HandleFunc("/api/progress", s.progress)
 	s.mux.HandleFunc("/api/playback/resolve", s.playbackResolve)
 	s.mux.HandleFunc("/api/playback/smart", s.playbackSmart)
