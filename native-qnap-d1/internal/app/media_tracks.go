@@ -77,6 +77,21 @@ func parseStreamIndex(r *http.Request) (int, error) {
 	return idx, nil
 }
 
+func audioSidecarArgs(path string, idx int, startMS int64) []string {
+	args := []string{"-nostdin", "-hide_banner", "-loglevel", "error"}
+	if startMS > 0 {
+		args = append(args, "-ss", fmt.Sprintf("%.3f", float64(startMS)/1000.0))
+	}
+	return append(args,
+		"-i", path,
+		"-map", fmt.Sprintf("0:%d", idx),
+		"-vn", "-sn", "-dn",
+		"-c:a", "aac", "-ac", "2", "-b:a", "192k",
+		"-movflags", "frag_keyframe+empty_moov+default_base_moof",
+		"-f", "mp4", "pipe:1",
+	)
+}
+
 func (s *Server) playbackAudio(w http.ResponseWriter, r *http.Request) {
 	if !tool("ffmpeg") {
 		jsonErr(w, http.StatusServiceUnavailable, "ffmpeg not found")
@@ -98,32 +113,23 @@ func (s *Server) playbackAudio(w http.ResponseWriter, r *http.Request) {
 		startMS = 0
 	}
 
-	args := []string{"-nostdin", "-hide_banner", "-loglevel", "error"}
-	if startMS > 0 {
-		args = append(args, "-ss", fmt.Sprintf("%.3f", float64(startMS)/1000.0))
-	}
-	args = append(args,
-		"-i", p,
-		"-map", "0:v:0",
-		"-map", fmt.Sprintf("0:%d", idx),
-		"-sn", "-dn",
-		"-c:v", "copy",
-		"-c:a", "aac", "-ac", "2", "-b:a", "192k",
-		"-movflags", "frag_keyframe+empty_moov+default_base_moof",
-		"-f", "mp4", "pipe:1",
-	)
+	// Browser audio selection is intentionally audio-only. The original video keeps
+	// playing through the already-proven Direct Play path while this sidecar stream
+	// supplies the selected audio track. This avoids remuxing H.264/HEVC into a new
+	// browser container and avoids exposing the Samsung AVPlay <object> fallback.
 	ctx := r.Context()
-	cmd := exec.CommandContext(ctx, "ffmpeg", args...)
+	cmd := exec.CommandContext(ctx, "ffmpeg", audioSidecarArgs(p, idx, startMS)...)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	cmd.Stdout = w
-	w.Header().Set("Content-Type", "video/mp4")
+	w.Header().Set("Content-Type", "audio/mp4")
 	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("X-HomeCinema-Source", source)
+	w.Header().Set("X-HomeCinema-Audio-Stream", strconv.Itoa(idx))
 	w.WriteHeader(http.StatusOK)
 	if err := cmd.Run(); err != nil && ctx.Err() == nil {
-		// Headers may already be committed. Log-level diagnostics remain available in the service log via stderr on caller failures.
-		fmt.Printf("browser audio stream failed: source=%s stream=%d err=%v ffmpeg=%s\n", source, idx, err, strings.TrimSpace(stderr.String()))
+		fmt.Printf("browser audio sidecar failed: source=%s stream=%d err=%v ffmpeg=%s\n", source, idx, err, strings.TrimSpace(stderr.String()))
 	}
 }
 
