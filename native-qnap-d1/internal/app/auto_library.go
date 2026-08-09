@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -40,7 +41,7 @@ func fingerprintLibrary(root string) (libraryFingerprint, error) {
 		fp.Bytes += info.Size()
 		_, _ = h.Write([]byte(filepath.ToSlash(rel)))
 		_, _ = h.Write([]byte{0})
-		_, _ = h.Write([]byte(string(rune(info.Size() & 0xffff))))
+		_, _ = h.Write([]byte(strconv.FormatInt(info.Size(), 10)))
 		_, _ = h.Write([]byte{0})
 		_, _ = h.Write([]byte(info.ModTime().UTC().Format(time.RFC3339Nano)))
 		return nil
