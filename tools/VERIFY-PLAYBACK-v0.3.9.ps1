@@ -117,14 +117,15 @@ $targets = @(
 Write-Host "`n=== DIRECT PLAY TRANSPORT ==="
 foreach ($t in $targets) {
     $ok = Test-Range $t.Url
-    Write-Host ("{0}: {1} => Range {2}" -f $t.Kind,$t.Title,($(if($ok){"PASS"}else{"FAIL"})))
+    $mark = if ($ok) { "PASS" } else { "FAIL" }
+    Write-Host ("{0}: {1} => Range {2}" -f $t.Kind,$t.Title,$mark)
     Assert-True $ok ("HTTP Range failed for " + $t.Title)
 }
 
 Write-Host "`nОткрываю существующий Home Cinema на NAS: $BaseUrl/"
 Start-Process ($BaseUrl + "/")
 
-Write-Host "`nПроверяем именно NAS/web-player. Аудиодорожки и субтитры через Samsung AVPlay будут отдельным этапом на телевизоре."
+Write-Host "`nПроверяем NAS/web-player после web UI hotfix."
 Write-Host "Контрольный фильм: $($movie.title)"
 Write-Host "Контрольная серия: After Life S$('{0:D2}' -f [int]$episode.season)E$('{0:D2}' -f [int]$episode.episode)"
 Write-Host "Контрольный бонус: Pasha — Фильм о фильме"
@@ -135,15 +136,21 @@ function Add-Check([string]$Name, [bool]$Pass) {
 }
 
 Add-Check "Главная страница загружается, постеры и метаданные видны" (Confirm-Step "Главная страница отображается нормально?")
+Add-Check "Полка фильмов прокручивается дальше первых четырех карточек" (Confirm-Step "Фильмы прокручиваются стрелкой/колесом дальше первых 4 карточек?")
+Add-Check "Полка сериалов прокручивается дальше первых четырех карточек" (Confirm-Step "Сериалы прокручиваются стрелкой/колесом дальше первых 4 карточек?")
+Add-Check "Список серий прокручивается" (Confirm-Step "В карточке сериала список серий прокручивается и доступны серии ниже видимой области?")
 Add-Check "Фильм запускается и играет не менее 30 секунд" (Confirm-Step "Запустите '$($movie.title)'. Видео и звук идут не менее 30 секунд?")
+Add-Check "В web-player видны кнопки управления" (Confirm-Step "В плеере видны Назад, -10 сек, Пауза/Play, +10 сек, Аудио, CC и полноэкранный режим?")
 Add-Check "Пауза и продолжение" (Confirm-Step "Пауза и повторное воспроизведение работают?")
-Add-Check "Перемотка вперед" (Confirm-Step "Перемотка вперед работает и воспроизведение продолжается?")
-Add-Check "Перемотка назад" (Confirm-Step "Перемотка назад работает и воспроизведение продолжается?")
-Add-Check "Продолжить просмотр появляется" (Confirm-Step "Вернитесь на главную. Карточка 'Продолжить просмотр' появилась для фильма?")
+Add-Check "Перемотка вперед" (Confirm-Step "+10 сек работает и воспроизведение продолжается?")
+Add-Check "Перемотка назад" (Confirm-Step "-10 сек работает и воспроизведение продолжается?")
+Add-Check "Клик по полосе прогресса перематывает" (Confirm-Step "Клик по полосе прогресса переводит фильм на выбранную позицию?")
+Add-Check "Продолжить просмотр появляется" (Confirm-Step "Нажмите Назад. Карточка 'Продолжить просмотр' появилась для фильма?")
 Add-Check "Возобновление с сохраненной позиции" (Confirm-Step "Запустите фильм из 'Продолжить просмотр'. Он продолжился примерно с сохраненной позиции?")
 Add-Check "Серия After Life запускается" (Confirm-Step "Откройте After Life и первую серию. Воспроизведение работает?")
 Add-Check "Pasha extra виден отдельно" (Confirm-Step "В Pasha виден отдельный блок 'Доп. материалы' с 'Фильм о фильме'?")
 Add-Check "Pasha extra воспроизводится" (Confirm-Step "Запустите 'Фильм о фильме'. Видео и звук работают?")
+Add-Check "Кнопка CC отрабатывает" (Confirm-Step "Кнопка CC реагирует: переключает доступные субтитры либо сообщает, что браузер их не обнаружил?")
 
 $failed = @($checks | Where-Object { -not $_.Pass })
 $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
@@ -157,7 +164,8 @@ $lines.Add("BaseUrl: " + $BaseUrl) | Out-Null
 $lines.Add("Runtime: " + $health.version) | Out-Null
 $lines.Add("") | Out-Null
 foreach ($x in $checks) {
-    $lines.Add(("[{0}] {1}" -f ($(if($x.Pass){"PASS"}else{"FAIL"})),$x.Name)) | Out-Null
+    $status = if ($x.Pass) { "PASS" } else { "FAIL" }
+    $lines.Add("[$status] $($x.Name)") | Out-Null
 }
 $lines.Add("") | Out-Null
 if ($failed.Count -eq 0) {
