@@ -2,7 +2,7 @@
 set -eu
 
 APP=HomeCinemaD1
-VERSION=0.3.8
+VERSION=0.3.9
 QPKG_CONF=/etc/config/qpkg.conf
 BASE_DIR="$(cd "$(dirname "$0")" 2>/dev/null && pwd)"
 
@@ -57,9 +57,14 @@ export HC_MEDIA_BASE_URL="http://192.168.0.101:8096/media/"
 export HC_DATA_DIR="$DATADIR"
 export HC_WEB_ROOT="$APPDIR/www"
 export HC_ENABLE_DTS_FALLBACK="false"
+export HC_AUTO_LIBRARY="true"
+export HC_AUTO_LIBRARY_INTERVAL_SECONDS="120"
 # Optional TMDB token:
 # export TMDB_BEARER_TOKEN="..."
 CONFEOF
+else
+  grep -q '^export HC_AUTO_LIBRARY=' "$CONF" || echo 'export HC_AUTO_LIBRARY="true"' >> "$CONF"
+  grep -q '^export HC_AUTO_LIBRARY_INTERVAL_SECONDS=' "$CONF" || echo 'export HC_AUTO_LIBRARY_INTERVAL_SECONDS="120"' >> "$CONF"
 fi
 
 cat > "$APPDIR/homecinema.sh" <<'SVCEOF'
