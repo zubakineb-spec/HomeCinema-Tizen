@@ -29,8 +29,10 @@ function patchProgressFetch(){
       if(opts&&String(opts.method||'GET').toUpperCase()==='POST'&&url.indexOf('/api/progress')>=0&&opts.body){
         var p=JSON.parse(opts.body),v=$('#htmlVideo');
         if(v&&progressSource(v)){
+          var offset=playbackOffset(v);
           p.source_url=progressSource(v);
-          p.position_ms=Math.max(0,Number(p.position_ms||0)+playbackOffset(v));
+          p.position_ms=Math.max(0,Number(p.position_ms||0)+offset);
+          p.duration_ms=Math.max(0,Number(p.duration_ms||0)+offset);
           p.completed=p.completed===true||Number(p.completed)!==0?1:0;
           opts=Object.assign({},opts,{body:JSON.stringify(p)});
         }
@@ -98,7 +100,7 @@ function cycleAudio(video){
 
 function saveHtmlProgress(video){
   var source=progressSource(video);if(!video||!source||!isFinite(video.duration)||video.duration<=0)return;
-  var payload={source_url:source,position_ms:Math.round((video.currentTime||0)*1000),duration_ms:Math.round((video.duration||0)*1000+playbackOffset(video)),completed:(video.duration>0&&video.currentTime/video.duration>0.95)?1:0};
+  var payload={source_url:source,position_ms:Math.round((video.currentTime||0)*1000),duration_ms:Math.round((video.duration||0)*1000),completed:(video.duration>0&&video.currentTime/video.duration>0.95)?1:0};
   try{fetch('/api/progress',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).catch(function(){})}catch(_){}
 }
 function restoreHtmlProgress(video){
