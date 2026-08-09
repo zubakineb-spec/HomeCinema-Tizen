@@ -2,7 +2,7 @@
 set -eu
 
 APP=HomeCinemaD1
-VERSION=0.3.9
+VERSION=0.3.10
 QPKG_CONF=/etc/config/qpkg.conf
 BASE_DIR="$(cd "$(dirname "$0")" 2>/dev/null && pwd)"
 
@@ -59,12 +59,20 @@ export HC_WEB_ROOT="$APPDIR/www"
 export HC_ENABLE_DTS_FALLBACK="false"
 export HC_AUTO_LIBRARY="true"
 export HC_AUTO_LIBRARY_INTERVAL_SECONDS="120"
+export HC_DLNA_ENABLED="true"
+export HC_DLNA_NAME="HOME CINEMA"
+export HC_DLNA_ADVERTISE_IP="192.168.0.101"
+export HC_DLNA_UUID="6a0a34d4-27dd-4e02-9e07-7ef386393010"
 # Optional TMDB token:
 # export TMDB_BEARER_TOKEN="..."
 CONFEOF
 else
   grep -q '^export HC_AUTO_LIBRARY=' "$CONF" || echo 'export HC_AUTO_LIBRARY="true"' >> "$CONF"
   grep -q '^export HC_AUTO_LIBRARY_INTERVAL_SECONDS=' "$CONF" || echo 'export HC_AUTO_LIBRARY_INTERVAL_SECONDS="120"' >> "$CONF"
+  grep -q '^export HC_DLNA_ENABLED=' "$CONF" || echo 'export HC_DLNA_ENABLED="true"' >> "$CONF"
+  grep -q '^export HC_DLNA_NAME=' "$CONF" || echo 'export HC_DLNA_NAME="HOME CINEMA"' >> "$CONF"
+  grep -q '^export HC_DLNA_ADVERTISE_IP=' "$CONF" || echo 'export HC_DLNA_ADVERTISE_IP="192.168.0.101"' >> "$CONF"
+  grep -q '^export HC_DLNA_UUID=' "$CONF" || echo 'export HC_DLNA_UUID="6a0a34d4-27dd-4e02-9e07-7ef386393010"' >> "$CONF"
 fi
 
 cat > "$APPDIR/homecinema.sh" <<'SVCEOF'
@@ -143,9 +151,13 @@ if [ -f "$QPKG_CONF" ]; then cp "$QPKG_CONF" "$QPKG_CONF.homecinema.$(date +%Y%m
 "$APPDIR/homecinema.sh" start
 sleep 2
 if "$APPDIR/homecinema.sh" status >/dev/null 2>&1; then
+  HEALTH="$(wget -qO- http://127.0.0.1:8096/api/health 2>/dev/null || true)"
+  echo "$HEALTH" | grep '"status":"ok"' >/dev/null 2>&1 || fail "Service started but /api/health is not ok"
+  echo "$HEALTH" | grep '"dlna_enabled":true' >/dev/null 2>&1 || fail "DLNA is not enabled"
   info "Installed and started: http://192.168.0.101:8096/"
-  info "Media root: $MEDIA"
-  info "Config: $CONF"
+  info "DLNA source: HOME CINEMA"
+  info "DLNA device: http://192.168.0.101:8096/dlna/device.xml"
+  info "Media root preserved/configured in: $CONF"
   info "Log: $DATADIR/homecinema.log"
 else
   fail "Service did not start. Check $DATADIR/homecinema.log"
