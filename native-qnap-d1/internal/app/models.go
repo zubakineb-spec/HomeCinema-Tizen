@@ -1,5 +1,7 @@
 package app
 
+import "encoding/json"
+
 type Movie struct {
 	ID             int     `json:"id"`
 	SourceURL      string  `json:"source_url"`
@@ -56,6 +58,41 @@ type Progress struct {
 	DurationMS int64  `json:"duration_ms"`
 	Completed  int    `json:"completed"`
 	UpdatedAt  string `json:"updated_at"`
+}
+
+// UnmarshalJSON keeps the progress API backward-compatible with both the
+// original numeric completed=0/1 contract and browser clients that naturally
+// send completed=false/true.
+func (p *Progress) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		SourceURL  string          `json:"source_url"`
+		PositionMS int64           `json:"position_ms"`
+		DurationMS int64           `json:"duration_ms"`
+		Completed  json.RawMessage `json:"completed"`
+		UpdatedAt  string          `json:"updated_at"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	p.SourceURL = raw.SourceURL
+	p.PositionMS = raw.PositionMS
+	p.DurationMS = raw.DurationMS
+	p.UpdatedAt = raw.UpdatedAt
+	p.Completed = 0
+	if len(raw.Completed) == 0 || string(raw.Completed) == "null" {
+		return nil
+	}
+	var n int
+	if err := json.Unmarshal(raw.Completed, &n); err == nil {
+		if n != 0 { p.Completed = 1 }
+		return nil
+	}
+	var b bool
+	if err := json.Unmarshal(raw.Completed, &b); err != nil {
+		return err
+	}
+	if b { p.Completed = 1 }
+	return nil
 }
 
 type State struct {
