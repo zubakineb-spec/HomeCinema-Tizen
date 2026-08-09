@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-const Version = "0.3.9"
+const Version = "0.3.10"
 
 type Config struct {
 	Listen              string
@@ -20,26 +20,40 @@ type Config struct {
 	EnableDTSFallback   bool
 	AutoLibrary         bool
 	AutoLibraryInterval time.Duration
+	DLNAEnabled         bool
+	DLNAName            string
+	DLNAAdvertiseIP     string
+	DLNAUUID            string
 }
 
 func getenv(k, d string) string {
-	if v := strings.TrimSpace(os.Getenv(k)); v != "" { return v }
+	if v := strings.TrimSpace(os.Getenv(k)); v != "" {
+		return v
+	}
 	return d
 }
 
 func boolenv(k string, d bool) bool {
 	v := strings.TrimSpace(os.Getenv(k))
-	if v == "" { return d }
+	if v == "" {
+		return d
+	}
 	b, err := strconv.ParseBool(v)
-	if err != nil { return d }
+	if err != nil {
+		return d
+	}
 	return b
 }
 
 func durationSecondsEnv(k string, d int) time.Duration {
 	v := strings.TrimSpace(os.Getenv(k))
-	if v == "" { return time.Duration(d) * time.Second }
+	if v == "" {
+		return time.Duration(d) * time.Second
+	}
 	n, err := strconv.Atoi(v)
-	if err != nil || n < 30 { return time.Duration(d) * time.Second }
+	if err != nil || n < 30 {
+		return time.Duration(d) * time.Second
+	}
 	return time.Duration(n) * time.Second
 }
 
@@ -56,5 +70,9 @@ func LoadConfig() Config {
 		EnableDTSFallback:   boolenv("HC_ENABLE_DTS_FALLBACK", false),
 		AutoLibrary:         boolenv("HC_AUTO_LIBRARY", true),
 		AutoLibraryInterval: durationSecondsEnv("HC_AUTO_LIBRARY_INTERVAL_SECONDS", 120),
+		DLNAEnabled:         boolenv("HC_DLNA_ENABLED", true),
+		DLNAName:            getenv("HC_DLNA_NAME", "HOME CINEMA"),
+		DLNAAdvertiseIP:     getenv("HC_DLNA_ADVERTISE_IP", "192.168.0.101"),
+		DLNAUUID:            getenv("HC_DLNA_UUID", "6a0a34d4-27dd-4e02-9e07-7ef386393010"),
 	}
 }
