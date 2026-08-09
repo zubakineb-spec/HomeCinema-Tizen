@@ -41,7 +41,7 @@ jobs:
           package-manager-cache: false
 
       - name: TV and web JavaScript syntax check
-        run: node --check tv-app/js/app.js && node --check tv-app/js/config.js && node --check tv-app/js/web-controls.js
+        run: node --check tv-app/js/app.js && node --check tv-app/js/config.js && node --check tv-app/js/web-controls.js && node --check tv-app/js/audio-sidecar.js
 
       - name: QNAP shell syntax check
         run: for f in qnap-d1/*.sh; do sh -n "$f"; done
