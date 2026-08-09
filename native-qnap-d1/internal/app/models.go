@@ -3,36 +3,38 @@ package app
 import "encoding/json"
 
 type Movie struct {
-	ID             int     `json:"id"`
-	SourceURL      string  `json:"source_url"`
-	Title          string  `json:"title"`
-	Year           int     `json:"year,omitempty"`
-	TMDBID         int     `json:"tmdb_id,omitempty"`
-	OriginalTitle  string  `json:"original_title,omitempty"`
-	Overview       string  `json:"overview,omitempty"`
-	PosterURL      string  `json:"poster_url,omitempty"`
-	BackdropURL    string  `json:"backdrop_url,omitempty"`
-	Rating         float64 `json:"rating,omitempty"`
-	Runtime        int     `json:"runtime,omitempty"`
-	Genres         string  `json:"genres,omitempty"`
-	MetadataStatus string  `json:"metadata_status"`
-	AddedAt        string  `json:"added_at"`
-	UpdatedAt      string  `json:"updated_at"`
+	ID              int     `json:"id"`
+	SourceURL       string  `json:"source_url"`
+	Title           string  `json:"title"`
+	RecognizedTitle string  `json:"recognized_title,omitempty"`
+	Year            int     `json:"year,omitempty"`
+	TMDBID          int     `json:"tmdb_id,omitempty"`
+	OriginalTitle   string  `json:"original_title,omitempty"`
+	Overview        string  `json:"overview,omitempty"`
+	PosterURL       string  `json:"poster_url,omitempty"`
+	BackdropURL     string  `json:"backdrop_url,omitempty"`
+	Rating          float64 `json:"rating,omitempty"`
+	Runtime         int     `json:"runtime,omitempty"`
+	Genres          string  `json:"genres,omitempty"`
+	MetadataStatus  string  `json:"metadata_status"`
+	AddedAt         string  `json:"added_at"`
+	UpdatedAt       string  `json:"updated_at"`
 }
 
 type Show struct {
-	ID             int     `json:"id"`
-	Title          string  `json:"title"`
-	TMDBID         int     `json:"tmdb_id,omitempty"`
-	OriginalTitle  string  `json:"original_title,omitempty"`
-	Overview       string  `json:"overview,omitempty"`
-	PosterURL      string  `json:"poster_url,omitempty"`
-	BackdropURL    string  `json:"backdrop_url,omitempty"`
-	Rating         float64 `json:"rating,omitempty"`
-	Genres         string  `json:"genres,omitempty"`
-	MetadataStatus string  `json:"metadata_status"`
-	AddedAt        string  `json:"added_at"`
-	UpdatedAt      string  `json:"updated_at"`
+	ID              int     `json:"id"`
+	Title           string  `json:"title"`
+	RecognizedTitle string  `json:"recognized_title,omitempty"`
+	TMDBID          int     `json:"tmdb_id,omitempty"`
+	OriginalTitle   string  `json:"original_title,omitempty"`
+	Overview        string  `json:"overview,omitempty"`
+	PosterURL       string  `json:"poster_url,omitempty"`
+	BackdropURL     string  `json:"backdrop_url,omitempty"`
+	Rating          float64 `json:"rating,omitempty"`
+	Genres          string  `json:"genres,omitempty"`
+	MetadataStatus  string  `json:"metadata_status"`
+	AddedAt         string  `json:"added_at"`
+	UpdatedAt       string  `json:"updated_at"`
 }
 
 type Episode struct {
