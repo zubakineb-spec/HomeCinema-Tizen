@@ -40,8 +40,11 @@ jobs:
           node-version: "24"
           package-manager-cache: false
 
-      - name: TV JavaScript syntax check
-        run: node --check tv-app/js/app.js && node --check tv-app/js/config.js
+      - name: TV and web JavaScript syntax check
+        run: node --check tv-app/js/app.js && node --check tv-app/js/config.js && node --check tv-app/js/web-controls.js && node --check tv-app/js/audio-sidecar.js
+
+      - name: QNAP shell syntax check
+        run: for f in qnap-d1/*.sh; do sh -n "$f"; done
 
       - name: Set up Go
         uses: actions/setup-go@v7
@@ -73,6 +76,6 @@ jobs:
       - name: Upload QNAP D1 ARMv7 bundle
         uses: actions/upload-artifact@v5
         with:
-          name: HomeCinema-D1-armv7-v0.3.8
+          name: HomeCinema-D1-armv7-v0.3.11
           path: qnap-d1-dist/
           if-no-files-found: error
