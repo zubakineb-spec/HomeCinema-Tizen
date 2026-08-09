@@ -76,6 +76,6 @@ jobs:
       - name: Upload QNAP D1 ARMv7 bundle
         uses: actions/upload-artifact@v5
         with:
-          name: HomeCinema-D1-armv7-v0.3.10
+          name: HomeCinema-D1-armv7-v0.3.11
           path: qnap-d1-dist/
           if-no-files-found: error
