@@ -31,6 +31,11 @@ func (s *Server) progress(w http.ResponseWriter, r *http.Request) {
 	jsonErr(w, http.StatusMethodNotAllowed, "GET/POST required")
 }
 
+func preferredDisplayTitle(title, recognized string) string {
+	if v := strings.TrimSpace(recognized); v != "" { return v }
+	return title
+}
+
 func (s *Server) continueWatching(w http.ResponseWriter, r *http.Request) {
 	st := s.store.Snapshot()
 	type item map[string]any
@@ -39,13 +44,13 @@ func (s *Server) continueWatching(w http.ResponseWriter, r *http.Request) {
 		if p.Completed != 0 || p.PositionMS <= 0 || p.DurationMS <= 0 || p.PositionMS >= p.DurationMS { continue }
 		for _, m := range st.Movies {
 			if m.SourceURL == p.SourceURL {
-				items = append(items, item{"media_type":"movie","id":m.ID,"title":m.Title,"parent_title":nil,"source_url":m.SourceURL,"image_url":m.PosterURL,"backdrop_url":m.BackdropURL,"position_ms":p.PositionMS,"duration_ms":p.DurationMS,"updated_at":p.UpdatedAt,"progress_percent":float64(p.PositionMS)*100/float64(p.DurationMS)})
+				items = append(items, item{"media_type":"movie","id":m.ID,"title":preferredDisplayTitle(m.Title,m.RecognizedTitle),"parent_title":nil,"source_url":m.SourceURL,"image_url":m.PosterURL,"backdrop_url":m.BackdropURL,"position_ms":p.PositionMS,"duration_ms":p.DurationMS,"updated_at":p.UpdatedAt,"progress_percent":float64(p.PositionMS)*100/float64(p.DurationMS)})
 			}
 		}
 		for _, e := range st.Episodes {
 			if e.SourceURL != p.SourceURL { continue }
 			parent, back, poster := "", "", ""
-			for _, sh := range st.Shows { if sh.ID == e.ShowID { parent=sh.Title; back=sh.BackdropURL; poster=sh.PosterURL } }
+			for _, sh := range st.Shows { if sh.ID == e.ShowID { parent=preferredDisplayTitle(sh.Title,sh.RecognizedTitle); back=sh.BackdropURL; poster=sh.PosterURL } }
 			img := e.StillURL; if img=="" { img=back }; if img=="" { img=poster }
 			mediaType := "episode"; if isExtra(e) { mediaType = "extra" }
 			x := item{"media_type":mediaType,"id":e.ID,"title":e.Title,"parent_title":parent,"source_url":e.SourceURL,"image_url":img,"backdrop_url":back,"position_ms":p.PositionMS,"duration_ms":p.DurationMS,"updated_at":p.UpdatedAt,"show_id":e.ShowID,"progress_percent":float64(p.PositionMS)*100/float64(p.DurationMS)}
