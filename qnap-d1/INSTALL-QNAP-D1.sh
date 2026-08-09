@@ -69,26 +69,52 @@ APPDIR="$(cd "$(dirname "$0")" 2>/dev/null && pwd)"
 . "$APPDIR/homecinema.conf"
 PIDFILE="$HC_DATA_DIR/homecinema.pid"
 LOGFILE="$HC_DATA_DIR/homecinema.log"
-case "${1:-start}" in
-  start)
-    if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE" 2>/dev/null)" 2>/dev/null; then exit 0; fi
-    mkdir -p "$HC_DATA_DIR" "$HC_DATA_DIR/hls"
-    cd "$APPDIR" || exit 1
-    ( trap '' HUP; exec "$APPDIR/homecinema-d1" >>"$LOGFILE" 2>&1 </dev/null ) &
-    echo $! > "$PIDFILE"
-    ;;
-  stop)
-    if [ -f "$PIDFILE" ]; then
-      PID="$(cat "$PIDFILE" 2>/dev/null || true)"
-      [ -n "$PID" ] && kill "$PID" 2>/dev/null || true
+
+running(){
+  [ -f "$PIDFILE" ] || return 1
+  PID="$(cat "$PIDFILE" 2>/dev/null || true)"
+  [ -n "$PID" ] || return 1
+  kill -0 "$PID" 2>/dev/null
+}
+
+start_service(){
+  if running; then return 0; fi
+  rm -f "$PIDFILE"
+  mkdir -p "$HC_DATA_DIR" "$HC_DATA_DIR/hls"
+  N=0
+  while [ ! -d "$HC_MEDIA_ROOT" ] && [ "$N" -lt 30 ]; do
+    sleep 2
+    N=$((N + 1))
+  done
+  cd "$APPDIR" || return 1
+  echo "$(date '+%Y-%m-%d %H:%M:%S') qts-start requested" >> "$LOGFILE"
+  ( trap '' HUP; exec "$APPDIR/homecinema-d1" >>"$LOGFILE" 2>&1 </dev/null ) &
+  echo $! > "$PIDFILE"
+  sleep 2
+  if running; then return 0; fi
+  rm -f "$PIDFILE"
+  echo "$(date '+%Y-%m-%d %H:%M:%S') qts-start failed" >> "$LOGFILE"
+  return 1
+}
+
+stop_service(){
+  if [ -f "$PIDFILE" ]; then
+    PID="$(cat "$PIDFILE" 2>/dev/null || true)"
+    if [ -n "$PID" ]; then
+      kill "$PID" 2>/dev/null || true
       sleep 1
-      [ -n "$PID" ] && kill -9 "$PID" 2>/dev/null || true
-      rm -f "$PIDFILE"
+      kill -9 "$PID" 2>/dev/null || true
     fi
-    ;;
-  restart) "$0" stop; "$0" start ;;
+    rm -f "$PIDFILE"
+  fi
+}
+
+case "${1:-start}" in
+  start) start_service ;;
+  stop) stop_service ;;
+  restart) stop_service; start_service ;;
   status)
-    if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE" 2>/dev/null)" 2>/dev/null; then echo running; exit 0; fi
+    if running; then echo running; exit 0; fi
     echo stopped; exit 1
     ;;
   *) echo "Usage: $0 {start|stop|restart|status}" >&2; exit 2 ;;
@@ -103,6 +129,8 @@ if [ -f "$QPKG_CONF" ]; then cp "$QPKG_CONF" "$QPKG_CONF.homecinema.$(date +%Y%m
 /sbin/setcfg "$APP" Author "HomeCinema-Tizen" -f "$QPKG_CONF"
 /sbin/setcfg "$APP" Shell "$APPDIR/homecinema.sh" -f "$QPKG_CONF"
 /sbin/setcfg "$APP" Install_Path "$APPDIR" -f "$QPKG_CONF"
+/sbin/setcfg "$APP" RC_Number "199" -f "$QPKG_CONF"
+/sbin/setcfg "$APP" Status "complete" -f "$QPKG_CONF"
 /sbin/setcfg "$APP" WebUI "/" -f "$QPKG_CONF"
 /sbin/setcfg "$APP" Web_Port "8096" -f "$QPKG_CONF"
 /sbin/setcfg "$APP" Enable "TRUE" -f "$QPKG_CONF"
