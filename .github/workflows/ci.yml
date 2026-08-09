@@ -40,8 +40,11 @@ jobs:
           node-version: "24"
           package-manager-cache: false
 
-      - name: TV JavaScript syntax check
-        run: node --check tv-app/js/app.js && node --check tv-app/js/config.js
+      - name: TV and web JavaScript syntax check
+        run: node --check tv-app/js/app.js && node --check tv-app/js/config.js && node --check tv-app/js/web-controls.js
+
+      - name: QNAP shell syntax check
+        run: for f in qnap-d1/*.sh; do sh -n "$f"; done
 
       - name: Set up Go
         uses: actions/setup-go@v7
