@@ -29,6 +29,14 @@ function scrollAmount(row){
   return Math.max(420,Math.floor(row.clientWidth*0.82));
 }
 
+function scrollRow(row,delta){
+  var target=Math.max(0,Math.min(row.scrollWidth-row.clientWidth,row.scrollLeft+delta));
+  try{
+    if(row.scrollTo)row.scrollTo({left:target,top:0,behavior:'smooth'});
+    else row.scrollLeft=target;
+  }catch(_){row.scrollLeft=target}
+}
+
 function updateShelfButtons(row){
   var shelf=row.parentNode;
   if(!shelf)return;
@@ -62,8 +70,8 @@ function enhanceRow(row){
   shelf.appendChild(left);
   shelf.appendChild(right);
 
-  left.onclick=function(){row.scrollBy({left:-scrollAmount(row),top:0,behavior:'smooth'});setTimeout(function(){updateShelfButtons(row)},260)};
-  right.onclick=function(){row.scrollBy({left:scrollAmount(row),top:0,behavior:'smooth'});setTimeout(function(){updateShelfButtons(row)},260)};
+  left.onclick=function(){scrollRow(row,-scrollAmount(row));setTimeout(function(){updateShelfButtons(row)},260)};
+  right.onclick=function(){scrollRow(row,scrollAmount(row));setTimeout(function(){updateShelfButtons(row)},260)};
 
   row.addEventListener('scroll',function(){updateShelfButtons(row)});
   row.addEventListener('wheel',function(e){
@@ -72,7 +80,7 @@ function enhanceRow(row){
       e.preventDefault();
       row.scrollLeft+=e.deltaY;
     }
-  },{passive:false});
+  },false);
 
   var dragging=false,startX=0,startLeft=0;
   row.addEventListener('mousedown',function(e){
@@ -114,9 +122,8 @@ function cycleAudio(video){
 
 function saveHtmlProgress(video){
   if(!video||!video.currentSrc||!isFinite(video.duration)||video.duration<=0)return;
-  var source=video.currentSrc;
   var payload={
-    source_url:source,
+    source_url:video.currentSrc,
     position_ms:Math.round((video.currentTime||0)*1000),
     duration_ms:Math.round(video.duration*1000),
     completed:video.duration>0&&video.currentTime/video.duration>0.95
@@ -188,10 +195,11 @@ function enhancePlayer(){
 
 function enhanceEpisodePane(){
   var pane=$('#seriesPane');
-  if(!pane)return;
+  if(!pane||pane.getAttribute('data-web-scroll')==='1')return;
+  pane.setAttribute('data-web-scroll','1');
   pane.addEventListener('wheel',function(e){
     if(pane.scrollHeight>pane.clientHeight+8){e.preventDefault();pane.scrollTop+=e.deltaY}
-  },{passive:false});
+  },false);
 }
 
 function refreshEnhancements(){
