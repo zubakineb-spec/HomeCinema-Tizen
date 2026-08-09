@@ -63,6 +63,7 @@ func (s *Server) enrich() map[string]int {
 		if e == nil { d = s.tmdb.movieOverviewFallback(d) }
 		if e == nil && d.ID > 0 {
 			st.Movies[i].TMDBID = d.ID
+			if strings.TrimSpace(d.Title) != "" { st.Movies[i].RecognizedTitle = strings.TrimSpace(d.Title) }
 			st.Movies[i].OriginalTitle = d.OriginalTitle
 			st.Movies[i].Overview = d.Overview
 			st.Movies[i].PosterURL = image(d.PosterPath, "w500")
@@ -84,6 +85,7 @@ func (s *Server) enrich() map[string]int {
 			if e == nil { d = s.tmdb.showOverviewFallback(d) }
 			if e == nil && d.ID > 0 {
 				st.Shows[i].TMDBID = d.ID
+				if strings.TrimSpace(d.Name) != "" { st.Shows[i].RecognizedTitle = strings.TrimSpace(d.Name) }
 				st.Shows[i].OriginalTitle = d.OriginalName
 				st.Shows[i].Overview = d.Overview
 				st.Shows[i].PosterURL = image(d.PosterPath, "w500")
@@ -134,10 +136,10 @@ func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 	shows := []map[string]any{}
 	if q != "" {
 		for _, m := range st.Movies {
-			if strings.Contains(strings.ToLower(m.Title+" "+m.OriginalTitle), q) { movies = append(movies, m) }
+			if strings.Contains(strings.ToLower(m.Title+" "+m.RecognizedTitle+" "+m.OriginalTitle), q) { movies = append(movies, m) }
 		}
 		for _, sh := range st.Shows {
-			if strings.Contains(strings.ToLower(sh.Title+" "+sh.OriginalTitle), q) {
+			if strings.Contains(strings.ToLower(sh.Title+" "+sh.RecognizedTitle+" "+sh.OriginalTitle), q) {
 				episodeCount, seasonCount, extraCount := showCounts(st, sh.ID)
 				x := toMap(sh); x["episode_count"] = episodeCount; x["season_count"] = seasonCount; x["extra_count"] = extraCount; shows = append(shows, x)
 			}
