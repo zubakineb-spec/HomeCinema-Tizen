@@ -1,9 +1,11 @@
 package app
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"os/exec"
 	"regexp"
@@ -33,7 +35,7 @@ func inspectMediaTracks(cfg Config, source string) ([]MediaTrack, []MediaTrack, 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "ffmpeg", "-hide_banner", "-i", p)
-	out, _ := cmd.CombinedOutput() // ffmpeg exits non-zero when no output file is specified; probe text is still valid.
+	out, _ := cmd.CombinedOutput()
 	if ctx.Err() != nil {
 		return nil, nil, fmt.Errorf("ffmpeg track inspection timeout")
 	}
@@ -66,7 +68,14 @@ func (s *Server) playbackTracks(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	jsonOut(w, map[string]any{"source_url": source, "audio": audio, "subtitles": subs, "ffmpeg": true})
+	jsonOut(w, map[string]any{
+		"source_url": source,
+		"audio": audio,
+		"subtitles": subs,
+		"ffmpeg": true,
+		"browser_audio_transport": "aac-adts",
+		"browser_audio_content_type": "audio/aac",
+	})
 }
 
 func parseStreamIndex(r *http.Request) (int, error) {
@@ -86,10 +95,13 @@ func audioSidecarArgs(path string, idx int, startMS int64) []string {
 		"-i", path,
 		"-map", fmt.Sprintf("0:%d", idx),
 		"-vn", "-sn", "-dn",
-		"-c:a", "aac", "-ac", "2", "-b:a", "192k",
-		"-movflags", "frag_keyframe+empty_moov+default_base_moof",
-		"-f", "mp4", "pipe:1",
+		"-c:a", "aac", "-profile:a", "aac_low", "-ac", "2", "-ar", "48000", "-b:a", "192k",
+		"-f", "adts", "pipe:1",
 	)
+}
+
+func validADTSPrefix(b []byte) bool {
+	return len(b) >= 2 && b[0] == 0xff && (b[1]&0xf6) == 0xf0
 }
 
 func (s *Server) playbackAudio(w http.ResponseWriter, r *http.Request) {
@@ -113,23 +125,43 @@ func (s *Server) playbackAudio(w http.ResponseWriter, r *http.Request) {
 		startMS = 0
 	}
 
-	// Browser audio selection is intentionally audio-only. The original video keeps
-	// playing through the already-proven Direct Play path while this sidecar stream
-	// supplies the selected audio track. This avoids remuxing H.264/HEVC into a new
-	// browser container and avoids exposing the Samsung AVPlay <object> fallback.
 	ctx := r.Context()
 	cmd := exec.CommandContext(ctx, "ffmpeg", audioSidecarArgs(p, idx, startMS)...)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
-	cmd.Stdout = w
-	w.Header().Set("Content-Type", "audio/mp4")
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		jsonErr(w, http.StatusInternalServerError, "cannot open ffmpeg audio pipe")
+		return
+	}
+	if err := cmd.Start(); err != nil {
+		jsonErr(w, http.StatusUnsupportedMediaType, "cannot start ffmpeg audio conversion")
+		return
+	}
+
+	reader := bufio.NewReaderSize(stdout, 32*1024)
+	prefix := make([]byte, 7)
+	if _, err := io.ReadFull(reader, prefix); err != nil || !validADTSPrefix(prefix) {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+		msg := strings.TrimSpace(stderr.String())
+		if msg == "" { msg = "ffmpeg did not produce an AAC/ADTS stream" }
+		jsonErr(w, http.StatusUnsupportedMediaType, msg)
+		return
+	}
+
+	w.Header().Set("Content-Type", "audio/aac")
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("X-HomeCinema-Source", source)
 	w.Header().Set("X-HomeCinema-Audio-Stream", strconv.Itoa(idx))
+	w.Header().Set("X-HomeCinema-Audio-Transport", "aac-adts")
 	w.WriteHeader(http.StatusOK)
-	if err := cmd.Run(); err != nil && ctx.Err() == nil {
-		fmt.Printf("browser audio sidecar failed: source=%s stream=%d err=%v ffmpeg=%s\n", source, idx, err, strings.TrimSpace(stderr.String()))
+	_, _ = w.Write(prefix)
+	_, copyErr := io.Copy(w, reader)
+	waitErr := cmd.Wait()
+	if ctx.Err() == nil && copyErr == nil && waitErr != nil {
+		fmt.Printf("browser AAC sidecar failed: source=%s stream=%d err=%v ffmpeg=%s\n", source, idx, waitErr, strings.TrimSpace(stderr.String()))
 	}
 }
 
