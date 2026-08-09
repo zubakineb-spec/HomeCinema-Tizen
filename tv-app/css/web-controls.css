@@ -55,6 +55,20 @@
   padding-bottom:30px;
 }
 
+.web-details-poster{
+  position:absolute;
+  z-index:3;
+  left:855px;
+  top:145px;
+  width:300px;
+  height:450px;
+  border-radius:18px;
+  background:#161b24 center/cover no-repeat;
+  box-shadow:0 24px 70px #000c;
+  border:1px solid #ffffff20;
+}
+.web-continue-button{margin-right:2px}
+
 .web-player-controls{
   display:flex;
   align-items:center;
@@ -89,6 +103,36 @@
   pointer-events:auto;
 }
 .web-seekbar span{pointer-events:none}
+
+.web-audio-panel{
+  position:absolute;
+  z-index:140;
+  right:55px;
+  top:80px;
+  width:520px;
+  max-height:760px;
+  overflow-y:auto;
+  background:#111720f5;
+  border:1px solid #ffffff24;
+  border-radius:20px;
+  padding:26px;
+  box-shadow:0 24px 80px #000b;
+}
+.web-audio-title{font-size:25px;font-weight:800;margin:0 0 16px}
+.web-audio-panel button{
+  display:block;
+  width:100%;
+  margin:8px 0;
+  border:0;
+  border-radius:12px;
+  background:#202732;
+  color:#fff;
+  text-align:left;
+  padding:15px 18px;
+  font-size:17px;
+  cursor:pointer;
+}
+.web-audio-panel button:hover,.web-audio-panel button:focus{outline:3px solid #fff;background:#303a49}
 
 @media (hover:none){
   .shelf-arrow{opacity:.72}
