@@ -105,7 +105,6 @@ chmod 755 "$SVC"
 /sbin/setcfg "$APP" Status "complete" -f "$QPKG_CONF"
 /sbin/setcfg "$APP" Enable "TRUE" -f "$QPKG_CONF"
 
-rm -f "$(/sbin/getcfg "$APP" Install_Path -f "$QPKG_CONF")/../.homecinema-dummy" 2>/dev/null || true
 "$SVC" restart
 sleep 3
 
