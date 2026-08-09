@@ -1,0 +1,95 @@
+.row{
+  overflow-x:auto!important;
+  overflow-y:visible!important;
+  scroll-behavior:smooth;
+  -webkit-overflow-scrolling:touch;
+  scrollbar-width:none;
+  cursor:grab;
+}
+.row::-webkit-scrollbar{display:none}
+.row.dragging{cursor:grabbing;user-select:none}
+.shelf{padding-right:70px}
+.shelf-arrow{
+  position:absolute;
+  z-index:12;
+  top:50%;
+  transform:translateY(-50%);
+  width:58px;
+  height:130px;
+  border:0;
+  border-radius:18px;
+  background:#090c12d9;
+  color:#fff;
+  font-size:58px;
+  line-height:1;
+  cursor:pointer;
+  opacity:.9;
+  box-shadow:0 8px 30px #0008;
+}
+.shelf-arrow:hover{background:#1b2230f2}
+.shelf-arrow:disabled{opacity:.18;cursor:default}
+.shelf-arrow-left{left:8px}
+.shelf-arrow-right{right:10px}
+.shelf:not(.shelf-scrollable) .shelf-arrow{display:none}
+
+.series-pane{
+  overflow-y:auto!important;
+  overflow-x:hidden!important;
+  padding-right:14px;
+  scrollbar-width:thin;
+}
+.episode-list{
+  height:auto!important;
+  max-height:none!important;
+  overflow:visible!important;
+  padding:5px!important;
+}
+.season-tabs{
+  overflow-x:auto!important;
+  scrollbar-width:none;
+  scroll-behavior:smooth;
+}
+.season-tabs::-webkit-scrollbar{display:none}
+.search-results{
+  overflow-y:auto!important;
+  padding-bottom:30px;
+}
+
+.web-player-controls{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  flex-wrap:wrap;
+  margin-top:20px;
+  pointer-events:auto;
+}
+.web-player-controls button{
+  border:1px solid #ffffff36;
+  border-radius:12px;
+  background:#171b22e8;
+  color:#fff;
+  min-width:112px;
+  padding:13px 18px;
+  font-size:18px;
+  font-weight:700;
+  cursor:pointer;
+}
+.web-player-controls button:hover,
+.web-player-controls button:focus{
+  outline:3px solid #fff;
+  background:#2a3240;
+}
+.web-player-controls .web-play-primary{
+  background:#fff;
+  color:#080a0e;
+}
+.web-seekbar{
+  height:12px!important;
+  cursor:pointer;
+  pointer-events:auto;
+}
+.web-seekbar span{pointer-events:none}
+
+@media (hover:none){
+  .shelf-arrow{opacity:.72}
+}
