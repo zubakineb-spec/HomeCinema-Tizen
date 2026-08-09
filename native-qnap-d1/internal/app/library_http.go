@@ -60,6 +60,7 @@ func (s *Server) enrich() map[string]int {
 	for i := range st.Movies {
 		if st.Movies[i].MetadataStatus == "matched" { continue }
 		d, e := s.tmdb.Movie(st.Movies[i].Title, st.Movies[i].Year)
+		if e == nil { d = s.tmdb.movieOverviewFallback(d) }
 		if e == nil && d.ID > 0 {
 			st.Movies[i].TMDBID = d.ID
 			st.Movies[i].OriginalTitle = d.OriginalTitle
@@ -80,6 +81,7 @@ func (s *Server) enrich() map[string]int {
 			var d details
 			var e error
 			if preferredID > 0 { d, e = s.tmdb.ShowByID(preferredID) } else { d, e = s.tmdb.Show(st.Shows[i].Title) }
+			if e == nil { d = s.tmdb.showOverviewFallback(d) }
 			if e == nil && d.ID > 0 {
 				st.Shows[i].TMDBID = d.ID
 				st.Shows[i].OriginalTitle = d.OriginalName
@@ -96,6 +98,7 @@ func (s *Server) enrich() map[string]int {
 			for j := range st.Episodes {
 				if st.Episodes[j].ShowID != st.Shows[i].ID || st.Episodes[j].MetadataStatus == "matched" || st.Episodes[j].MetadataStatus == "local" || isExtra(st.Episodes[j]) { continue }
 				d, e := s.tmdb.Episode(st.Shows[i].TMDBID, st.Episodes[j].Season, st.Episodes[j].Episode)
+				if e == nil { d = s.tmdb.episodeOverviewFallback(st.Shows[i].TMDBID, st.Episodes[j].Season, st.Episodes[j].Episode, d) }
 				if e == nil {
 					if d.Name != "" { st.Episodes[j].Title = d.Name }
 					st.Episodes[j].Overview = d.Overview
