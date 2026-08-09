@@ -5,13 +5,15 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync"
 )
 
 type Server struct {
-	cfg   Config
-	store *Store
-	tmdb  *TMDB
-	mux   *http.ServeMux
+	cfg    Config
+	store  *Store
+	tmdb   *TMDB
+	mux    *http.ServeMux
+	scanMu sync.Mutex
 }
 
 func NewServer(cfg Config) (*http.Server, error) {
