@@ -7,102 +7,117 @@
   <script type="text/javascript" src="$WEBAPIS/webapis/webapis.js"></script>
   <link rel="stylesheet" href="css/app.css" />
 </head>
-<body>
+<body tabindex="-1">
   <div id="app">
-    <header>
-      <div class="brand"><span class="mark">HC</span><span>HOME CINEMA</span></div>
-      <nav>
+    <header id="topbar">
+      <div class="brand"><img src="icon.png" class="brand-icon" alt=""/><span>HOME CINEMA</span></div>
+      <nav class="nav-row" data-nav-row="top">
         <button class="nav-item focusable active" data-view="home">Главная</button>
         <button class="nav-item focusable" data-view="movies">Фильмы</button>
         <button class="nav-item focusable" data-view="shows">Сериалы</button>
         <button class="nav-item focusable" data-view="search">Поиск</button>
-        <button class="nav-item focusable" data-view="about">О приложении</button>
       </nav>
       <div id="clock"></div>
     </header>
 
-    <main>
+    <main id="homeScreen">
       <section id="hero" class="hero">
-        <div class="shade"></div>
+        <div class="hero-shade"></div>
         <div class="hero-content">
           <div class="eyebrow">МОЯ МЕДИАТЕКА</div>
           <h1 id="heroTitle">Домашний кинотеатр</h1>
-          <div id="heroMeta" class="hero-meta">Samsung Tizen • локальная медиатека</div>
-          <p id="heroOverview">Фильмы и сериалы с домашнего сервера — без рекламы и подписок.</p>
-          <button id="heroPlay" class="focusable primary" data-action="hero-play">▶ Смотреть</button>
+          <div id="heroMeta" class="hero-meta"></div>
+          <p id="heroOverview">Фильмы и сериалы с домашнего сервера.</p>
+          <div class="hero-actions nav-row" data-nav-row="hero">
+            <button id="heroPlay" class="focusable primary">▶ Смотреть</button>
+            <button id="heroInfo" class="focusable secondary">Подробнее</button>
+          </div>
         </div>
       </section>
 
-      <section id="continueSection" class="shelf hidden">
-        <h2>Продолжить просмотр</h2>
-        <div class="row wide-row" id="continueRow"></div>
-      </section>
-      <section id="movieSection" class="shelf">
-        <h2>Фильмы</h2>
-        <div class="row" id="movieRow"></div>
-      </section>
-      <section id="showSection" class="shelf">
-        <h2>Сериалы</h2>
-        <div class="row" id="showRow"></div>
-      </section>
+      <div id="shelfViewport" class="shelf-viewport">
+        <div id="shelvesTrack" class="shelves-track">
+          <section id="continueSection" class="shelf hidden" data-shelf="continue">
+            <h2>Продолжить просмотр</h2>
+            <div class="rail nav-row" id="continueRow" data-nav-row="continue"></div>
+          </section>
+          <section id="movieSection" class="shelf" data-shelf="movies">
+            <h2>Фильмы</h2>
+            <div class="rail nav-row" id="movieRow" data-nav-row="movies"></div>
+          </section>
+          <section id="showSection" class="shelf" data-shelf="shows">
+            <h2>Сериалы</h2>
+            <div class="rail nav-row" id="showRow" data-nav-row="shows"></div>
+          </section>
+        </div>
+      </div>
+
       <section id="empty" class="empty hidden">
         <h2>Медиатека пока пуста</h2>
-        <p>Просканируйте <code>192.168.0.101</code> и соберите каталог фильмов и сериалов.</p>
-        <button id="scanButton" class="focusable primary">⟳ Сканировать медиатеку</button>
+        <button id="scanButton" class="focusable primary">Обновить медиатеку</button>
       </section>
     </main>
 
-    <div id="details" class="overlay hidden"></div>
-
-    <div id="aboutOverlay" class="overlay about-overlay hidden">
-      <div class="about-card">
-        <div class="eyebrow">HOME CINEMA</div>
-        <h1>О приложении</h1>
-        <p>Локальный домашний кинотеатр для Samsung Tizen. Видео хранится в вашей домашней сети.</p>
-        <div class="credits-block">
-          <div class="credits-source">Метаданные и изображения: <strong>TMDB</strong></div>
-          <p class="credits-notice">This product uses the TMDB API but is not endorsed or certified by TMDB.</p>
-          <p class="credits-note">Для распространяемой сборки необходимо использовать утверждённый TMDB logo asset в соответствии с правилами TMDB Logos &amp; Attribution.</p>
-        </div>
-        <button id="aboutBack" class="focusable primary">Назад</button>
-      </div>
-    </div>
+    <div id="details" class="details-screen hidden"></div>
 
     <div id="searchOverlay" class="overlay search-overlay hidden">
       <div class="search-box">
-        <div class="eyebrow">ПОИСК ПО МЕДИАТЕКЕ</div>
-        <input id="searchInput" class="focusable search-input" type="search" autocomplete="off" placeholder="Название фильма или сериала" />
-        <div id="searchHint">Нажмите OK, чтобы открыть экранную клавиатуру Samsung.</div>
-        <div id="searchResults" class="search-results"></div>
+        <div class="eyebrow">ПОИСК</div>
+        <input id="searchInput" class="focusable search-input" data-nav-row="search-input" type="search" autocomplete="off" placeholder="Название фильма или сериала" />
+        <div id="searchResults" class="search-results nav-row" data-nav-row="search-results"></div>
       </div>
     </div>
 
     <div id="player" class="player hidden">
-      <object id="avplay" type="application/avplayer"></object>
-      <video id="htmlVideo" playsinline></video>
-      <div id="subtitleText" class="subtitle-text"></div>
-      <div id="playerUi" class="player-ui">
-        <div class="player-heading">
-          <div id="playerTitle"></div>
-          <div id="playerState">▶</div>
-        </div>
-        <div class="progress"><span id="playerProgress"></span></div>
-        <div class="player-help">←/→ ±10 сек · OK пауза · ↑ аудио и субтитры · Назад закрыть</div>
+      <div id="avHost" class="av-host"></div>
+      <video id="htmlVideo" class="hidden" playsinline></video>
+
+      <div id="playerBoot" class="player-boot">
+        <div class="spinner"></div>
+        <div id="playerBootText">Запуск видео…</div>
+        <div class="player-boot-hint">Назад — отменить</div>
       </div>
-      <div id="trackPanel" class="track-panel hidden">
-        <div class="track-column">
-          <h3>Аудио</h3>
-          <div id="audioTracks"></div>
+
+      <div id="subtitleText" class="subtitle-text"></div>
+
+      <div id="playerChrome" class="player-chrome hidden">
+        <div class="player-chrome-shade"></div>
+        <div class="player-chrome-content">
+          <div class="player-title-line">
+            <div id="playerTitle" class="player-title"></div>
+            <div id="playerStateText" class="player-state-text">Воспроизведение</div>
+          </div>
+          <div class="player-timeline-row">
+            <div id="playerCurrentTime" class="player-time">00:00</div>
+            <div class="progress"><span id="playerProgress"></span></div>
+            <div id="playerDurationTime" class="player-time">00:00</div>
+          </div>
+          <div id="playerControls" class="player-controls">
+            <button class="player-control player-focusable" data-player-action="rewind"><span class="control-icon">↶</span><span>10 сек</span></button>
+            <button id="playerToggleButton" class="player-control player-control-main player-focusable" data-player-action="toggle"><span id="playerToggleIcon" class="control-icon">Ⅱ</span><span id="playerToggleLabel">Пауза</span></button>
+            <button class="player-control player-focusable" data-player-action="forward"><span class="control-icon">↷</span><span>10 сек</span></button>
+            <button id="playerAudioButton" class="player-control player-control-setting player-focusable" data-player-panel="audio"><span class="control-icon">♪</span><span class="control-copy"><b>Аудио</b><small id="playerAudioLabel">Авто</small></span></button>
+            <button id="playerSubtitleButton" class="player-control player-control-setting player-focusable" data-player-panel="subtitles"><span class="control-icon">CC</span><span class="control-copy"><b>Субтитры</b><small id="playerSubtitleLabel">Выкл.</small></span></button>
+          </div>
+          <div class="player-hint">OK — управление · ←/→ — перемотка · Назад — закрыть меню / выйти</div>
         </div>
-        <div class="track-column">
-          <h3>Субтитры</h3>
-          <div id="subtitleTracks"></div>
+      </div>
+
+      <div id="playerSettings" class="player-settings hidden">
+        <div class="player-settings-sheet">
+          <div class="player-settings-head">
+            <div id="playerSettingsKicker" class="player-settings-kicker">НАСТРОЙКИ</div>
+            <h2 id="playerSettingsTitle">Аудио</h2>
+            <div class="player-settings-hint">↑/↓ выбор · OK применить · Назад закрыть</div>
+          </div>
+          <div id="playerSettingsList" class="player-settings-list"></div>
         </div>
       </div>
     </div>
 
     <div id="toast" class="toast hidden"></div>
   </div>
+  <script src="js/image-map.js"></script>
   <script src="js/config.js"></script>
   <script src="js/app.js"></script>
 </body>
