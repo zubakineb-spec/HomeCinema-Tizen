@@ -41,7 +41,7 @@ jobs:
           package-manager-cache: false
 
       - name: TV JavaScript syntax check
-        run: node --check tv-app/js/app.js && node --check tv-app/js/config.js
+        run: node --check tv-app/js/app.js && node --check tv-app/js/config.js && node --check tv-app/js/browser-avplay-shim.js
 
       - name: Set up Go
         uses: actions/setup-go@v7
@@ -70,9 +70,14 @@ jobs:
           cp -R tv-app qnap-d1-dist/www
           chmod +x qnap-d1-dist/homecinema-d1 qnap-d1-dist/*.sh
 
+      - name: Read version
+        id: version
+        shell: bash
+        run: echo "value=$(tr -d '\r\n' < VERSION)" >> "$GITHUB_OUTPUT"
+
       - name: Upload QNAP D1 ARMv7 bundle
         uses: actions/upload-artifact@v5
         with:
-          name: HomeCinema-D1-armv7-v0.3.8
+          name: HomeCinema-D1-armv7-v${{ steps.version.outputs.value }}
           path: qnap-d1-dist/
           if-no-files-found: error
