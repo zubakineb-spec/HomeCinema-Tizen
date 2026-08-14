@@ -6,6 +6,12 @@
 
 `0.3.2`
 
+## Важный статус Samsung TV deployment
+
+Установка новых WGT на Samsung UE49NU7500 / Tizen 4.0 сейчас выделена в отдельный внешний blocker: issue #10. Минимальный WGT воспроизводит отказ как на текущем SDK, так и на изолированном toolchain 2018 года, включая полностью новый Samsung TV certificate profile с правильным DUID и успешным `Install Permitted`.
+
+Это **не должно блокировать разработку HomeCinema**. Подробная матрица проверок и правило продолжения разработки: [`docs/TIZEN4-DEPLOYMENT-BLOCKER.md`](docs/TIZEN4-DEPLOYMENT-BLOCKER.md).
+
 ## Целевая схема QNAP D1
 
 ```text
