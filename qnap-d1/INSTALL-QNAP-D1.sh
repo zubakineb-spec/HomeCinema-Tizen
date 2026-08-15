@@ -105,12 +105,19 @@ if [ -f "$QPKG_CONF" ]; then cp "$QPKG_CONF" "$QPKG_CONF.homecinema.$(date +%Y%m
 /sbin/setcfg "$APP" Install_Path "$APPDIR" -f "$QPKG_CONF"
 /sbin/setcfg "$APP" WebUI "/" -f "$QPKG_CONF"
 /sbin/setcfg "$APP" Web_Port "8096" -f "$QPKG_CONF"
+/sbin/setcfg "$APP" RC_Number "199" -f "$QPKG_CONF"
 /sbin/setcfg "$APP" Enable "TRUE" -f "$QPKG_CONF"
+
+QPKG_ENABLE="$(/sbin/getcfg "$APP" Enable -f "$QPKG_CONF" 2>/dev/null || true)"
+QPKG_RC="$(/sbin/getcfg "$APP" RC_Number -f "$QPKG_CONF" 2>/dev/null || true)"
+[ "$QPKG_ENABLE" = "TRUE" ] || fail "QPKG Enable was not persisted"
+[ "$QPKG_RC" = "199" ] || fail "QPKG RC_Number was not persisted"
 
 "$APPDIR/homecinema.sh" start
 sleep 2
 if "$APPDIR/homecinema.sh" status >/dev/null 2>&1; then
   info "Installed and started: http://192.168.0.101:8096/"
+  info "QPKG autostart: Enable=$QPKG_ENABLE RC_Number=$QPKG_RC"
   info "Media root: $MEDIA"
   info "Config: $CONF"
   info "Log: $DATADIR/homecinema.log"
