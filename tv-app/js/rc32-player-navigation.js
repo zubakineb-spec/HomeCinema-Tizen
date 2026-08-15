@@ -9,6 +9,10 @@ var scrubOrigin=0;
 var scrubWasPlaying=false;
 var seekInFlight=false;
 var SCRUB_STEP=10000;
+var SCRUB_STEP_MEDIUM=30000;
+var SCRUB_STEP_FAST=60000;
+var scrubHoldCount=0;
+var scrubHoldDirection=0;
 var nativeSetTimeout=window.setTimeout;
 
 function $(s,root){return (root||document).querySelector(s)}
@@ -33,6 +37,14 @@ function playbackReady(){
   var p=av();if(!p)return false;
   try{var st=p.getState();return st==='PLAYING'||st==='PAUSED'}catch(_){return false}
 }
+function resetHold(){scrubHoldCount=0;scrubHoldDirection=0}
+function holdStep(direction){
+  if(scrubHoldDirection!==direction){scrubHoldDirection=direction;scrubHoldCount=0}
+  scrubHoldCount++;
+  if(scrubHoldCount>=11)return SCRUB_STEP_FAST;
+  if(scrubHoldCount>=5)return SCRUB_STEP_MEDIUM;
+  return SCRUB_STEP;
+}
 function ensureScrubUi(){
   var t=timeline();if(!t)return null;
   var fill=$('#playerScrubFill',t),preview=$('#playerSeekPreview',t);
@@ -44,7 +56,7 @@ function setHint(text){var hint=$('.player-hint');if(hint)hint.textContent=text}
 function focusTimeline(){
   var t=timeline();if(!t)return;
   clearPlayerFocus();t.classList.add('focused');try{t.focus()}catch(_){}
-  setHint('←/→ — выбрать позицию · отпустить — перейти · OK — сразу · ↓ — к кнопкам · Назад — отменить');
+  setHint('←/→ — выбрать позицию · удерживать: 10→30→60 сек · отпустить — перейти · OK — сразу · ↓ — к кнопкам · Назад — отменить');
 }
 function focusControl(){
   var c=lastControl;
@@ -55,7 +67,7 @@ function focusControl(){
 function timelineFocused(){var t=timeline();return !!t&&(document.activeElement===t||t.classList.contains('focused'))}
 function resetInactivePlayerNavigation(){
   if(playerActive())return false;
-  scrubActive=false;scrubWasPlaying=false;seekInFlight=false;
+  scrubActive=false;scrubWasPlaying=false;seekInFlight=false;resetHold();
   var t=timeline();
   if(t){
     t.classList.remove('focused');t.classList.remove('scrubbing');
@@ -77,7 +89,7 @@ function hideScrubUi(delay){
     ui.timeline.classList.remove('scrubbing');ui.fill.style.width='0%';ui.preview.style.display='none';
   },delay||0);
 }
-function renderScrub(){
+function renderScrub(step){
   var ui=ensureScrubUi();if(!ui||!scrubDuration)return;
   var pct=clamp(scrubTarget/scrubDuration*100,0,100);
   ui.timeline.classList.add('scrubbing');
@@ -88,7 +100,8 @@ function renderScrub(){
   var state=$('#playerStateText');
   if(state){
     var diff=Math.round((scrubTarget-scrubOrigin)/1000);
-    state.textContent='Выбрано '+formatTime(scrubTarget)+(diff===0?'':(' · '+(diff>0?'+':'')+diff+' сек'));
+    var stepText=step?(' · шаг '+Math.round(step/1000)+' сек'):'';
+    state.textContent='Выбрано '+formatTime(scrubTarget)+(diff===0?'':(' · '+(diff>0?'+':'')+diff+' сек'))+stepText;
   }
 }
 function beginScrub(){
@@ -98,22 +111,19 @@ function beginScrub(){
   if(!dur)return false;
   scrubWasPlaying=st==='PLAYING';
   if(scrubWasPlaying){try{p.pause()}catch(_){scrubWasPlaying=false}}
-  scrubActive=true;scrubOrigin=pos;scrubTarget=pos;scrubDuration=dur;
-  renderScrub();return true;
+  scrubActive=true;scrubOrigin=pos;scrubTarget=pos;scrubDuration=dur;resetHold();
+  renderScrub(0);return true;
 }
-function stepScrub(delta){
+function stepScrub(direction){
   if(!scrubActive&&!beginScrub())return;
-  scrubTarget=clamp(scrubTarget+delta,0,Math.max(0,scrubDuration-1000));
-  renderScrub();
-}
-function restorePlaybackAfterScrub(p){
-  if(!scrubWasPlaying||!playerActive())return;
-  try{if(p&&p.getState&&p.getState()==='PAUSED')p.play()}catch(_){}
+  var step=holdStep(direction);
+  scrubTarget=clamp(scrubTarget+(direction*step),0,Math.max(0,scrubDuration-1000));
+  renderScrub(step);
 }
 function commitScrub(immediateFeedback){
   if(!scrubActive||seekInFlight)return;
   var p=av(),target=Math.round(scrubTarget),label=formatTime(target),resume=scrubWasPlaying;
-  scrubActive=false;seekInFlight=true;scrubWasPlaying=false;
+  scrubActive=false;seekInFlight=true;scrubWasPlaying=false;resetHold();
   if(!p){seekInFlight=false;hideScrubUi(0);return}
   var state=$('#playerStateText');if(state)state.textContent='Переход к '+label;
   var done=function(){
@@ -129,17 +139,11 @@ function commitScrub(immediateFeedback){
 function cancelScrub(){
   if(!scrubActive)return;
   var p=av(),resume=scrubWasPlaying;
-  scrubActive=false;scrubWasPlaying=false;hideScrubUi(0);
+  scrubActive=false;scrubWasPlaying=false;resetHold();hideScrubUi(0);
   if(resume&&p&&playerActive()){try{if(p.getState()==='PAUSED')p.play()}catch(_){}}
   var state=$('#playerStateText');if(state&&playerActive())state.textContent=resume?'Воспроизведение':'Пауза';
 }
 
-/*
- * app.js hides the player menu after 7 seconds. While the user is holding
- * Left/Right on the timeline that timeout must not terminate scrub mode.
- * Suppress only that one menu-hide callback while the timeline owns focus.
- * The next normal control movement schedules a fresh native app timeout.
- */
 window.setTimeout=function(fn,delay){
   var args=Array.prototype.slice.call(arguments,2);
   if(Number(delay)===7000&&typeof fn==='function'){
@@ -154,7 +158,7 @@ window.setTimeout=function(fn,delay){
 document.addEventListener('focusin',function(e){
   var control=closest(e.target,'#playerControls .player-focusable');
   if(control){
-    lastControl=control;
+    lastControl=control;resetHold();
     var t=timeline();if(t)t.classList.remove('focused');
   }
 },true);
@@ -165,29 +169,18 @@ window.addEventListener('keydown',function(e){
   if(!playerChromeVisible()||settingsOpen())return;
 
   if(timelineFocused()){
-    if(code===37||code===412){consume(e);stepScrub(-SCRUB_STEP);return false}
-    if(code===39||code===417){consume(e);stepScrub(SCRUB_STEP);return false}
+    if(code===37||code===412){consume(e);stepScrub(-1);return false}
+    if(code===39||code===417){consume(e);stepScrub(1);return false}
     if(code===13){consume(e);commitScrub(true);return false}
     if(code===40){consume(e);if(scrubActive)commitScrub(true);focusControl();return false}
     if(code===38){consume(e);return false}
-    if(code===10009||code===27){
-      /* Cancel an uncommitted target, but DO NOT consume Back.
-       * app.js must still see the same Back event so it can close the menu;
-       * the next Back then stops the movie normally. */
-      if(scrubActive)cancelScrub();
-      return;
-    }
+    if(code===10009||code===27){if(scrubActive)cancelScrub();return}
     return;
   }
 
-  /* Outside the timeline, app.js remains the single source of truth for
-   * Left/Right/OK, Audio, Subtitles, Play/Pause and Back. */
   var active=closest(document.activeElement,'#playerControls .player-focusable');
   if(active&&code===38){
-    lastControl=active;
-    consume(e);
-    focusTimeline();
-    return false;
+    lastControl=active;resetHold();consume(e);focusTimeline();return false;
   }
 },true);
 
@@ -195,9 +188,7 @@ window.addEventListener('keyup',function(e){
   var code=Number(e.keyCode||e.which||0);
   if(!playerChromeVisible()||settingsOpen()||!timelineFocused()||!scrubActive)return;
   if(code!==37&&code!==39&&code!==412&&code!==417)return;
-  consume(e);
-  commitScrub(false);
-  return false;
+  consume(e);commitScrub(false);return false;
 },true);
 
 ensureScrubUi();
