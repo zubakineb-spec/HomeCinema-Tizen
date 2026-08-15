@@ -1,63 +1,124 @@
 # Home Cinema for Samsung Tizen
 
-Локальный домашний кинотеатр для Samsung Smart TV. Целевая домашняя схема: Samsung UE49NU7500U и NAS `192.168.0.101`.
+Локальный домашний кинотеатр для Samsung Smart TV с NAS-first архитектурой. Целевая система — Samsung UE49NU7500U и QNAP D1 / ARMv7 / QTS 4.3.6.
 
-## Текущая версия
+## Статус релизов
 
-`0.3.18` — RC-ready функциональный baseline.
+**TV-validated baseline:** `0.3.18 RC3.6`.
 
-Код TV-клиента, QNAP D1 runtime и постоянные TV regression gates находятся в `main`. Установка WGT на целевой Samsung 2018 / Tizen 4.0 остаётся отдельным внешним blocker и отслеживается в issue #10 и `docs/TIZEN4-DEPLOYMENT-BLOCKER.md`.
+- package: `HomeCinema-Tizen-v0.3.18-rc3.6.wgt`;
+- source: `32a1f962264adebf1fb85bfeea4a0e0f5dffd19e`;
+- физическая установка и запуск на Samsung UE49NU7500U подтверждены;
+- Back с главного экрана завершает приложение;
+- D-pad после выхода из плеера восстановлен и закрыт regression-gate.
 
-## Целевая схема QNAP D1
+**Next candidate:** `0.3.18 RC3.7 engineering`.
+
+RC3.7 содержит крупный reliability/UX pass. Код проходит CI, но до отдельного TV-теста RC3.6 остаётся стабильным rollback. Сам engineering workflow не устанавливает RC3.7 на телевизор.
+
+## Архитектура
 
 ```text
-Samsung UE49NU7500U
+Samsung UE49NU7500U / Tizen 4
         |
-        | LAN
+        | LAN / HTTP
         v
-QNAP D1 192.168.0.101
-  ├─ локальная медиатека
-  ├─ Home Cinema native ARMv7 backend :8096
-  ├─ catalog.json / progress.json
-  ├─ /media/ с HTTP Range для Direct Play
-  └─ TMDb metadata; FFmpeg fallback опционален
+QNAP D1 192.168.0.101:8096
+  ├─ native ARMv7 Home Cinema backend
+  ├─ catalog.json + backups
+  ├─ progress.json + backups
+  ├─ image-cache/                 TMDB artwork cache
+  ├─ /media/                      Direct Play + HTTP Range
+  ├─ /api/catalog
+  ├─ /api/history /api/next
+  ├─ /api/diagnostics /api/health
+  └─ optional FFmpeg DTS fallback
 ```
 
-Для **QNAP D1 / ARMv7 / 2 ядра / 1 ГБ / QTS 4.3.6.2805** используется специальный нативный runtime из `native-qnap-d1`. Он не требует Docker и системного Python. Установка выполняется скриптами из `qnap-d1`.
+Для QNAP D1 используется нативный Go runtime из `native-qnap-d1`: без Docker и системного Python. Python/FastAPI backend остаётся альтернативой для более мощных NAS.
 
-Backend сам публикует видео как `http://192.168.0.101:8096/media/...`. Телевизор поэтому не зависит от отдельной настройки QNAP Web Server. `http.FileServer` обеспечивает byte-range ответы, необходимые для перемотки/seek больших видеофайлов.
+## TV-клиент
 
-## Возможности
+Базовые возможности:
 
-- фильмы и сериалы из локальных каталогов NAS;
-- распознавание `S01E02`, `1x02`, `Season 01`, `Сезон 01`, `S01` и числовых файлов серий;
-- TMDb: русские названия/описания, постеры, backdrop, рейтинг, жанры и данные эпизодов;
-- поиск;
-- «Продолжить просмотр» с устойчивым сохранением позиции;
-- сезоны, серии и дополнительные материалы;
-- Okko-style TV UI и отдельная focus model для Samsung Smart Remote;
-- Samsung Smart Remote: D-pad, OK, Back, MediaPlayPause, отдельные MediaPlay/MediaPause, Stop, Rewind/FastForward;
-- Samsung AVPlay lifecycle с сериализацией seek/restore seek и `suspend()/restore()`;
-- сохранение PAUSED через background/restore и смену аудиодорожки;
-- выбор аудиодорожек и встроенных субтитров через AVPlay;
-- автоматический выбор совместимой не-DTS аудиодорожки;
-- Direct Play с NAS;
-- browser AVPlay shim для desktop/CI проверок без подмены native AVPlay на Samsung TV;
-- профиль совместимости Samsung UE49NU7500U / Tizen 4.0 / Chromium M56;
-- экран «О приложении / Credits» с TMDB attribution.
+- фильмы, сериалы, сезоны, серии и дополнительные материалы;
+- русские TMDB metadata, постеры, backdrop, stills, рейтинги и жанры;
+- поиск и «Продолжить просмотр»;
+- Samsung AVPlay Direct Play;
+- выбор аудиодорожек и встроенных субтитров;
+- автоматический выбор совместимой non-DTS дорожки;
+- Smart Remote: D-pad, OK, Back, Play/Pause, Stop, Rewind/FastForward;
+- AVPlay lifecycle: seek serialization, background suspend/restore, сохранение PAUSED;
+- Tizen 4 / Chromium M56 compatibility gates.
 
-## Хранение данных на D1
+RC3.7 дополнительно вводит:
 
-D1-runtime использует два небольших JSON-файла вместо SQLite:
+- восстановление TV↔NAS после временного сетевого сбоя;
+- локальный кеш каталога/details и offline search;
+- очередь progress POST с доставкой после reconnect;
+- локальную прокси-кеш выдачу TMDB artwork через NAS `/api/image`;
+- Историю просмотра и просмотренные элементы;
+- Избранное;
+- сортировку по новым/названию/рейтингу/году и фильтр жанра;
+- Continue / «С начала»;
+- next episode + опциональный 7-секундный autoplay countdown;
+- compatibility badges;
+- сохранение аудио/субтитров для сериала;
+- размер субтитров 36/44/52/60 px;
+- timeline scrub 10→30→60 секунд при удержании Left/Right;
+- экран диагностики и изменение NAS endpoint.
 
-- `catalog.json` — фильмы, сериалы, эпизоды и TMDb metadata;
-- `progress.json` — позиции просмотра.
+## QNAP D1 backend
 
-Разделение снижает количество записей большого каталога при частом сохранении позиции воспроизведения.
+### Сканирование
 
-## Установка на QNAP D1
+RC3.7 использует incremental scan. Для каждого источника сохраняются `file_size` и `file_mtime`. Неизменившийся файл повторно не прогоняется через ffprobe; новый или изменённый получает новый media profile. Исчезнувшие источники исключаются при ReplaceScan.
 
-Готовый ARMv7 install bundle содержит:
+Media profile хранит:
+
+- container;
+- video codec;
+- width/height;
+- HDR flag;
+- audio codecs;
+- subtitle codecs;
+- compatibility: `direct`, `direct_expected`, `dts_only`, `review`.
+
+### Persistence
+
+`catalog.json` и `progress.json` пишутся отдельно. RC3.7 добавляет:
+
+1. запись во временный файл;
+2. file `fsync`;
+3. atomic rename;
+4. directory sync;
+5. три поколения `.bak1/.bak2/.bak3`;
+6. автоматическое восстановление primary JSON из первого валидного backup.
+
+Это особенно важно для слабого NAS, где прогресс обновляется значительно чаще каталога.
+
+### TMDB artwork cache
+
+Backend разрешает кешировать только HTTPS URL с `image.tmdb.org`. Изображение хранится в `HC_IMAGE_CACHE_DIR` и после первого обращения отдаётся с NAS. TV-клиент переводит известные TMDB URL на:
+
+```text
+/api/image?url=<encoded TMDB URL>
+```
+
+Размер отдельного кешируемого изображения ограничен 20 MiB.
+
+### Диагностика
+
+```text
+GET /api/health
+GET /api/diagnostics
+```
+
+Diagnostics включает runtime/version, размеры каталога, число media profiles, compatibility buckets, image cache, media root/base URL и доступность ffprobe/FFmpeg.
+
+## Установка backend на QNAP D1
+
+CI формирует ARMv7 bundle:
 
 ```text
 homecinema-d1
@@ -69,7 +130,7 @@ VERSION
 www/
 ```
 
-После копирования пакета на NAS и временного включения SSH:
+После копирования на NAS и временного включения SSH:
 
 ```sh
 chmod +x *.sh homecinema-d1
@@ -77,105 +138,93 @@ chmod +x *.sh homecinema-d1
 ./INSTALL-QNAP-D1.sh
 ```
 
-Установщик:
-
-- проверяет ARMv7 и запуск бинарника;
-- определяет QNAP data volume и share `Multimedia`;
-- устанавливает backend в `.qpkg/HomeCinemaD1`;
-- хранит каталог/прогресс отдельно в `.homecinema-d1`;
-- регистрирует сервис в `/etc/config/qpkg.conf` через QNAP `setcfg`;
-- создаёт резервную копию `qpkg.conf` перед изменением;
-- включает автозапуск и порт `8096`.
-
-После установки:
+Основные адреса после запуска:
 
 ```text
-UI/API:  http://192.168.0.101:8096/
-Health:  http://192.168.0.101:8096/api/health
-Media:   http://192.168.0.101:8096/media/...
+UI/API: http://192.168.0.101:8096/
+Health: http://192.168.0.101:8096/api/health
+Media:  http://192.168.0.101:8096/media/...
 ```
 
-Первое сканирование:
+Первый/повторный scan:
 
 ```sh
 curl -X POST http://127.0.0.1:8096/api/scan
 ```
 
-Подробно: `qnap-d1/README-QNAP-D1.md`.
+## TMDB
 
-## TMDb
-
-В созданном установщиком `homecinema.conf` можно добавить:
+В QNAP config:
 
 ```sh
-export TMDB_BEARER_TOKEN="ВАШ_TOKEN"
+export TMDB_BEARER_TOKEN="YOUR_TOKEN"
 ```
 
-После изменения перезапустите сервис `homecinema.sh restart`.
+Без token локальная медиатека и воспроизведение продолжают работать, но новое TMDB enrichment не выполняется.
 
-Без токена медиатека индексируется, но внешние описания и изображения не загружаются.
+## DTS
 
-## DTS и QNAP D1
+Основной сценарий для D1 — Direct Play. Если файл содержит совместимую альтернативную audio track, TV-клиент выбирает её через AVPlay.
 
-Samsung UE49NU7500U не должен получать DTS-only поток как единственный звук. Если MKV содержит альтернативную совместимую дорожку, TV-клиент выбирает её через AVPlay без транскодирования.
+DTS-only fallback остаётся опциональным:
 
-На D1 `HC_ENABLE_DTS_FALLBACK=false` по умолчанию. Если на NAS доступны `ffprobe` и `ffmpeg`, fallback можно включить после аппаратного теста. В этом режиме видео копируется без перекодирования, а только звук преобразуется в AAC. Для двухъядерного ARM это опциональный режим, а не основной сценарий.
-
-## Samsung Tizen client
-
-Каталог `tv-app` — Samsung Tizen Web Application. Для установленного приложения API по умолчанию:
-
-```text
-http://192.168.0.101:8096
+```sh
+export HC_ENABLE_DTS_FALLBACK=false
 ```
 
-Для установки `.wgt` на телевизор нужны Samsung TV SDK/Tizen Studio, Developer Mode телевизора и Samsung certificate profile. Базовые скрипты:
+Если fallback включён и доступны ffprobe/FFmpeg, video копируется, audio преобразуется в AAC. Полный realtime video transcoding не является целевым режимом для двухъядерного ARMv7 D1.
+
+## TV release workflow
+
+### Build-only — рекомендуемый режим RC3.7
 
 ```powershell
-.\BUILD-SAMSUNG-WGT.ps1 -CertificateProfile "ИмяПрофиля"
-.\INSTALL-SAMSUNG-WGT.ps1 -Target "имя-target"
+.\RELEASE-TV.ps1 -RC rc3.7 -CertificateProfile HomeCinemaTV-FRESH
 ```
 
-Подробно: `docs/SAMSUNG-INSTALL.md`.
+По умолчанию скрипт **не подключается к телевизору и ничего на него не устанавливает**. Он запускает локальные gates, собирает/подписывает WGT, проверяет содержимое и подписи, копирует RC-файл на Рабочий стол и создаёт JSON manifest с SHA-256/source SHA.
 
-### Samsung 2018 / Tizen 4 deployment blocker
+Ожидаемый результат:
 
-На UE49NU7500 WGT в текущем окружении передаётся на TV, но установка обрывается до `installing[n]`. Уже исключены приложение/manifest/размер пакета, current и legacy packager, старый и свежий Samsung certificate profile, неправильный DUID, SDB connectivity и отсутствие `Install Permitted`.
+```text
+HomeCinema-Tizen-v0.3.18-rc3.7.wgt
+HomeCinema-Tizen-v0.3.18-rc3.7.json
+```
 
-Следующий контролируемый эксперимент — импорт уже подписанного `.wgt` обратно в Tizen Studio как нового Tizen Web project с целью Tizen 4.0 и установка импортированного проекта на тот же TV.
+Установка возможна только отдельным явным `-Install` либо через `INSTALL-SAMSUNG-WGT.ps1 -TvIp ...`. Подробно: `docs/SAMSUNG-INSTALL.md`.
 
-Полная матрица: `docs/TIZEN4-DEPLOYMENT-BLOCKER.md`. Tracking: issue #10.
-
-## Более мощные NAS
-
-Python/FastAPI backend, SQLite, Dockerfile и `docker-compose.nas.yml` сохраняются для современных x86-64/ARM64 NAS с контейнерной средой. Для QNAP D1 целевым остаётся native ARMv7 runtime.
-
-## CI и versioning
-
-SemVer. Репозиторий: `zubakineb-spec/HomeCinema-Tizen`.
+## CI
 
 GitHub Actions проверяет:
 
-- Python backend regression suite и compile check;
+- Python backend tests + compile;
 - JavaScript syntax;
-- player state smoke;
-- progress consistency smoke;
-- AVPlay lifecycle smoke;
-- Tizen 4 / Chromium M56 compatibility gate;
-- release-candidate Smart Remote UX / attribution gate;
-- Go tests D1-runtime;
-- ARMv7 cross-build и install artifact.
+- player state/progress/lifecycle;
+- post-player remote navigation;
+- root Back exit;
+- RC3.7 resilience/UX markers;
+- RC3.7 accelerated scrub;
+- Tizen 4 / Chromium M56 compatibility;
+- release candidate UX / TMDB attribution;
+- API origin routing;
+- Go formatting;
+- QNAP native Go tests;
+- ARMv7 cross-build;
+- QNAP install bundle artifact.
 
-Cross-build:
+## Versioning
+
+`VERSION` и Tizen widget version остаются `0.3.18` внутри текущей RC-линейки. TV candidates отличаются RC suffix в имени подписанного пакета:
 
 ```text
-GOOS=linux GOARCH=arm GOARM=7 CGO_ENABLED=0
+HomeCinema-Tizen-v0.3.18-rc3.6.wgt
+HomeCinema-Tizen-v0.3.18-rc3.7.wgt
 ```
 
-CI формирует artifact `HomeCinema-D1-armv7-v0.3.18`.
+`CHANGELOG.md` отдельно фиксирует подтверждённый TV baseline и engineering candidates.
 
-## Атрибуция TMDb
+## Attribution
 
-TV-клиент содержит экран «О приложении / Credits» с TMDB logo asset и уведомлением:
+Home Cinema использует TMDB metadata/images и содержит required TMDB attribution screen:
 
 `This product uses the TMDB API but is not endorsed or certified by TMDB.`
