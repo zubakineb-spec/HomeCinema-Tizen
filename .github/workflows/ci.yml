@@ -48,6 +48,7 @@ jobs:
           node --check tools/player-state-smoke.js
           node --check tools/progress-consistency-smoke.js
           node --check tools/player-lifecycle-smoke.js
+          node --check tools/tizen4-compat-smoke.js
 
       - name: TV player state smoke test
         run: node tools/player-state-smoke.js
@@ -57,6 +58,9 @@ jobs:
 
       - name: TV AVPlay lifecycle smoke test
         run: node tools/player-lifecycle-smoke.js
+
+      - name: Tizen 4 Chromium 56 compatibility gate
+        run: node tools/tizen4-compat-smoke.js
 
       - name: Set up Go
         uses: actions/setup-go@v7
