@@ -46,11 +46,15 @@ jobs:
           node --check tv-app/js/config.js
           node --check tv-app/js/browser-avplay-shim.js
           node --check tv-app/js/rc-release.js
+          node --check tv-app/js/rc32-player-navigation.js
+          node --check tv-app/js/rc37-enhancements.js
           node --check tools/player-state-smoke.js
           node --check tools/progress-consistency-smoke.js
           node --check tools/player-lifecycle-smoke.js
           node --check tools/player-exit-navigation-smoke.js
           node --check tools/root-back-exit-smoke.js
+          node --check tools/rc37-enhancements-smoke.js
+          node --check tools/player-ux-rc37-smoke.js
           node --check tools/tizen4-compat-smoke.js
           node --check tools/release-candidate-smoke.js
           node --check tools/api-origin-smoke.js
@@ -70,6 +74,12 @@ jobs:
       - name: TV root Back exit gate
         run: node tools/root-back-exit-smoke.js
 
+      - name: TV RC3.7 enhancement gate
+        run: node tools/rc37-enhancements-smoke.js
+
+      - name: TV RC3.7 player UX gate
+        run: node tools/player-ux-rc37-smoke.js
+
       - name: Tizen 4 Chromium 56 compatibility gate
         run: node tools/tizen4-compat-smoke.js
 
@@ -84,6 +94,11 @@ jobs:
         with:
           go-version: "1.23.x"
           cache-dependency-path: native-qnap-d1/go.mod
+
+      - name: QNAP D1 Go format gate
+        working-directory: native-qnap-d1
+        run: |
+          test -z "$(gofmt -l .)" || { echo 'gofmt required:'; gofmt -l .; exit 1; }
 
       - name: QNAP D1 native tests
         working-directory: native-qnap-d1
