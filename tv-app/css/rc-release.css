@@ -1,0 +1,12 @@
+.about-overlay{z-index:180;display:flex;align-items:center;justify-content:center;padding:70px}
+.about-card{width:1120px;background:#111017;border:1px solid rgba(255,255,255,.12);border-radius:26px;padding:58px 64px;box-shadow:0 30px 100px rgba(0,0,0,.70)}
+.about-card h1{font-size:55px;margin:0 0 22px}
+.about-card>p{font-size:21px;line-height:1.5;color:#c8c8cf;margin:0 0 30px}
+.credits-block{display:flex;align-items:center;background:#0d253f;border-radius:18px;padding:28px 30px;margin:0 0 30px;min-height:180px}
+.tmdb-logo{display:block;width:96px;height:96px;object-fit:contain;margin-right:30px;flex:0 0 96px}
+.credits-copy{width:850px}
+.credits-source{font-size:24px;margin-bottom:14px}
+.credits-notice{font-size:18px!important;line-height:1.42!important;color:#fff!important;margin:0 0 10px!important}
+.credits-note{font-size:15px!important;line-height:1.42!important;color:#aeb8c7!important;margin:0!important}
+.about-back{border:0;border-radius:13px;padding:16px 30px;font-size:21px;font-weight:800;outline:none}
+.about-back:focus{box-shadow:0 0 0 4px #fff,0 12px 30px rgba(0,0,0,.45)}
