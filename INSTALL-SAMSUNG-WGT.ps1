@@ -1,8 +1,10 @@
 param(
-    [Parameter(Mandatory = $true)]
-    [string]$Target,
-
-    [string]$PackagePath = ''
+    [string]$Target = '',
+    [string]$Serial = '',
+    [string]$TvIp = '',
+    [string]$PackagePath = '',
+    [switch]$Run,
+    [string]$AppId = 'HCINEMA001.HomeCinema'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -25,11 +27,46 @@ if (-not $PackagePath) {
 $PackageDir = Split-Path $PackagePath -Parent
 $PackageName = Split-Path $PackagePath -Leaf
 
-Write-Host 'Connected targets:'
-if (Get-Command sdb -ErrorAction SilentlyContinue) { & sdb devices }
+if ($TvIp) {
+    if (-not (Get-Command sdb -ErrorAction SilentlyContinue)) {
+        throw 'sdb not found in PATH.'
+    }
+    & sdb connect $TvIp | Out-Host
+    Start-Sleep -Milliseconds 600
+}
 
-Write-Host "Installing $PackageName to target $Target ..."
-& tizen install -t $Target --name $PackageName -- $PackageDir
-if ($LASTEXITCODE -ne 0) { throw "tizen install failed: $LASTEXITCODE" }
+if (-not $Serial -and $TvIp) {
+    $DeviceLine = @(& sdb devices) |
+        Where-Object { $_ -match [regex]::Escape($TvIp) -and $_ -match '\bdevice\b' } |
+        Select-Object -First 1
+    if (-not $DeviceLine) { throw "TV is not connected through SDB: $TvIp" }
+    $Serial = (($DeviceLine -split '\s+')[0]).Trim()
+}
 
-Write-Host 'Installation completed.'
+if ($Serial) {
+    Write-Host "Installing $PackageName to SDB device $Serial ..."
+    & tizen install-permit -s $Serial | Out-Host
+    if ($LASTEXITCODE -ne 0) { throw "tizen install-permit failed: $LASTEXITCODE" }
+    & tizen install -s $Serial --name $PackageName -- $PackageDir | Out-Host
+    if ($LASTEXITCODE -ne 0) { throw "tizen install failed: $LASTEXITCODE" }
+    if ($Run) {
+        & tizen run -s $Serial -p $AppId | Out-Host
+        if ($LASTEXITCODE -ne 0) { Write-Warning "Install succeeded but run failed: $LASTEXITCODE" }
+    }
+    Write-Host 'Installation completed.'
+    return
+}
+
+if ($Target) {
+    Write-Host "Installing $PackageName to named target $Target ..."
+    & tizen install -t $Target --name $PackageName -- $PackageDir | Out-Host
+    if ($LASTEXITCODE -ne 0) { throw "tizen install failed: $LASTEXITCODE" }
+    if ($Run) {
+        & tizen run -t $Target -p $AppId | Out-Host
+        if ($LASTEXITCODE -ne 0) { Write-Warning "Install succeeded but run failed: $LASTEXITCODE" }
+    }
+    Write-Host 'Installation completed.'
+    return
+}
+
+throw 'Specify -Serial, -TvIp, or legacy -Target. No installation was attempted.'
