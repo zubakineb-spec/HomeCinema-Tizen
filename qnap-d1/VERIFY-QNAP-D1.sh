@@ -14,3 +14,6 @@ printf 'ffprobe: '; command -v ffprobe || echo not-found
 printf 'ffmpeg: '; command -v ffmpeg || echo not-found
 printf 'Port 8096: '; netstat -lnt 2>/dev/null | grep ':8096 ' || echo free-or-not-detected
 printf 'Binary: '; ./homecinema-d1 --version 2>&1
+printf 'QPKG Enable: '; /sbin/getcfg HomeCinemaD1 Enable -f /etc/config/qpkg.conf 2>/dev/null || echo not-registered
+printf 'QPKG RC_Number: '; /sbin/getcfg HomeCinemaD1 RC_Number -f /etc/config/qpkg.conf 2>/dev/null || echo not-registered
+printf 'QPKG Shell: '; /sbin/getcfg HomeCinemaD1 Shell -f /etc/config/qpkg.conf 2>/dev/null || echo not-registered
