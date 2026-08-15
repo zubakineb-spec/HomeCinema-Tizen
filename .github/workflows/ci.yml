@@ -51,6 +51,7 @@ jobs:
           node --check tools/player-lifecycle-smoke.js
           node --check tools/tizen4-compat-smoke.js
           node --check tools/release-candidate-smoke.js
+          node --check tools/api-origin-smoke.js
 
       - name: TV player state smoke test
         run: node tools/player-state-smoke.js
@@ -66,6 +67,9 @@ jobs:
 
       - name: TV release candidate UX and attribution gate
         run: node tools/release-candidate-smoke.js
+
+      - name: TV API origin routing gate
+        run: node tools/api-origin-smoke.js
 
       - name: Set up Go
         uses: actions/setup-go@v7
