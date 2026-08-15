@@ -1,0 +1,189 @@
+param(
+    [string]$RC = 'rc3.7',
+    [string]$CertificateProfile = 'HomeCinemaTV-FRESH',
+    [string]$TvIp = '192.168.0.103',
+    [switch]$Install,
+    [switch]$SkipLocalTests
+)
+
+$ErrorActionPreference = 'Stop'
+Set-Location $PSScriptRoot
+
+function Fail([string]$Message) { throw $Message }
+function Run-Step([string]$Name, [scriptblock]$Action) {
+    Write-Host "`n=== $Name ==="
+    & $Action
+}
+
+$Version = (Get-Content (Join-Path $PSScriptRoot 'VERSION') -Raw).Trim()
+if (-not $Version) { Fail 'VERSION_EMPTY' }
+if ($RC -notmatch '^rc\d+\.\d+$') { Fail "INVALID_RC=$RC" }
+
+$SourceSha = ''
+if (Get-Command git -ErrorAction SilentlyContinue) {
+    $SourceSha = (& git -C $PSScriptRoot rev-parse HEAD 2>$null).Trim()
+}
+if (-not $SourceSha) { $SourceSha = 'unknown' }
+
+$ReleaseName = "HomeCinema-Tizen-v$Version-$RC.wgt"
+$Desktop = [Environment]::GetFolderPath('Desktop')
+$Target = Join-Path $Desktop $ReleaseName
+$ManifestTarget = [System.IO.Path]::ChangeExtension($Target, '.json')
+
+Write-Host '=== HOME CINEMA TV RELEASE ==='
+Write-Host "VERSION=$Version"
+Write-Host "RC=$RC"
+Write-Host "SOURCE_SHA=$SourceSha"
+Write-Host "INSTALL_REQUESTED=$([bool]$Install)"
+Write-Host "TARGET=$Target"
+
+if (-not $SkipLocalTests) {
+    Run-Step 'LOCAL RELEASE GATES' {
+        if (Get-Command node -ErrorAction SilentlyContinue) {
+            $JsFiles = @(
+                'tv-app/js/app.js',
+                'tv-app/js/config.js',
+                'tv-app/js/rc-release.js',
+                'tv-app/js/rc32-player-navigation.js',
+                'tv-app/js/rc37-enhancements.js',
+                'tools/player-state-smoke.js',
+                'tools/progress-consistency-smoke.js',
+                'tools/player-lifecycle-smoke.js',
+                'tools/player-exit-navigation-smoke.js',
+                'tools/root-back-exit-smoke.js',
+                'tools/rc37-enhancements-smoke.js',
+                'tools/player-ux-rc37-smoke.js'
+            )
+            foreach ($Rel in $JsFiles) {
+                $Path = Join-Path $PSScriptRoot $Rel
+                if (-not (Test-Path $Path)) { Fail "RELEASE_GATE_FILE_MISSING=$Rel" }
+                & node --check $Path
+                if ($LASTEXITCODE -ne 0) { Fail "NODE_CHECK_FAILED=$Rel" }
+            }
+            foreach ($Smoke in @(
+                'tools/player-state-smoke.js',
+                'tools/progress-consistency-smoke.js',
+                'tools/player-lifecycle-smoke.js',
+                'tools/player-exit-navigation-smoke.js',
+                'tools/root-back-exit-smoke.js',
+                'tools/rc37-enhancements-smoke.js',
+                'tools/player-ux-rc37-smoke.js'
+            )) {
+                & node (Join-Path $PSScriptRoot $Smoke)
+                if ($LASTEXITCODE -ne 0) { Fail "SMOKE_FAILED=$Smoke" }
+            }
+        } else {
+            Write-Warning 'Node.js not found; JavaScript release gates skipped locally.'
+        }
+
+        if (Get-Command go -ErrorAction SilentlyContinue) {
+            Push-Location (Join-Path $PSScriptRoot 'native-qnap-d1')
+            try {
+                & go test ./...
+                if ($LASTEXITCODE -ne 0) { Fail 'GO_TEST_FAILED' }
+            } finally { Pop-Location }
+        } else {
+            Write-Warning 'Go not found; QNAP tests skipped locally.'
+        }
+    }
+}
+
+Run-Step 'BUILD + SAMSUNG SIGN' {
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'BUILD-SAMSUNG-WGT.ps1') -CertificateProfile $CertificateProfile
+    if ($LASTEXITCODE -ne 0) { Fail "BUILD_FAILED=$LASTEXITCODE" }
+}
+
+$Built = Join-Path $PSScriptRoot "dist\HomeCinema-Tizen-v$Version.wgt"
+if (-not (Test-Path $Built)) { Fail "WGT_NOT_FOUND=$Built" }
+
+Run-Step 'COPY RELEASE TO DESKTOP' {
+    Copy-Item $Built $Target -Force
+    if (-not (Test-Path $Target)) { Fail "DESKTOP_COPY_FAILED=$Target" }
+}
+
+Run-Step 'VERIFY WGT' {
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $Zip = [System.IO.Compression.ZipFile]::OpenRead($Target)
+    try {
+        $Entries = @($Zip.Entries | ForEach-Object { $_.FullName })
+        foreach ($Required in @(
+            'config.xml',
+            'author-signature.xml',
+            'signature1.xml',
+            'index.html',
+            'js/app.js',
+            'js/rc-release.js',
+            'js/rc32-player-navigation.js',
+            'js/rc37-enhancements.js',
+            'css/rc37-enhancements.css'
+        )) {
+            if ($Entries -notcontains $Required) { Fail "WGT_MISSING_ENTRY=$Required" }
+        }
+
+        function Read-ZipText([string]$Name) {
+            $Entry = $Zip.Entries | Where-Object { $_.FullName -eq $Name } | Select-Object -First 1
+            if (-not $Entry) { Fail "WGT_ENTRY_NOT_FOUND=$Name" }
+            $Stream = $Entry.Open()
+            try {
+                $Reader = New-Object System.IO.StreamReader($Stream)
+                try { return $Reader.ReadToEnd() } finally { $Reader.Dispose() }
+            } finally { $Stream.Dispose() }
+        }
+
+        $Config = Read-ZipText 'config.xml'
+        $EscapedVersion = [regex]::Escape($Version)
+        if ($Config -notmatch ('version="' + $EscapedVersion + '"')) { Fail 'WGT_VERSION_CHECK_FAILED' }
+
+        $PlayerNav = Read-ZipText 'js/rc32-player-navigation.js'
+        if ($PlayerNav -notmatch 'resetInactivePlayerNavigation') { Fail 'WGT_PLAYER_EXIT_NAVIGATION_FIX_MISSING' }
+        if ($PlayerNav -notmatch 'SCRUB_STEP_MEDIUM=30000' -or $PlayerNav -notmatch 'SCRUB_STEP_FAST=60000') { Fail 'WGT_RC37_SCRUB_ACCELERATION_MISSING' }
+
+        $Release = Read-ZipText 'js/rc-release.js'
+        if ($Release -notmatch 'getCurrentApplication\(\)\.exit\(\)') { Fail 'WGT_ROOT_BACK_EXIT_MISSING' }
+
+        $Enhancements = Read-ZipText 'js/rc37-enhancements.js'
+        foreach ($Marker in @('/api/diagnostics','/api/history','/api/next','homecinema.favorites','homecinema.progress.queue')) {
+            if ($Enhancements -notmatch [regex]::Escape($Marker)) { Fail "WGT_RC37_MARKER_MISSING=$Marker" }
+        }
+    } finally { $Zip.Dispose() }
+}
+
+$File = Get-Item $Target
+$Hash = Get-FileHash $Target -Algorithm SHA256
+$Manifest = [ordered]@{
+    product = 'Home Cinema'
+    version = $Version
+    rc = $RC
+    package = $ReleaseName
+    source_sha = $SourceSha
+    size = $File.Length
+    sha256 = $Hash.Hash
+    certificate_profile = $CertificateProfile
+    built_utc = [DateTime]::UtcNow.ToString('o')
+    installed = $false
+}
+
+if ($Install) {
+    Run-Step 'INSTALL TO SAMSUNG TV' {
+        & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'INSTALL-SAMSUNG-WGT.ps1') -TvIp $TvIp -PackagePath $Target -Run
+        if ($LASTEXITCODE -ne 0) { Fail "TV_INSTALL_FAILED=$LASTEXITCODE" }
+    }
+    $Manifest.installed = $true
+}
+
+$Manifest | ConvertTo-Json -Depth 4 | Set-Content -Path $ManifestTarget -Encoding UTF8
+
+Write-Host ''
+Write-Host '=============================================='
+Write-Host 'HOME_CINEMA_TV_RELEASE=PASS'
+Write-Host "VERSION=$Version"
+Write-Host "RC=$RC"
+Write-Host "SOURCE_SHA=$SourceSha"
+Write-Host "WGT=$Target"
+Write-Host "WGT_SIZE=$($File.Length)"
+Write-Host "WGT_SHA256=$($Hash.Hash)"
+Write-Host "MANIFEST=$ManifestTarget"
+Write-Host "TV_INSTALL=$([bool]$Install)"
+Write-Host '=============================================='
+
+explorer.exe "/select,`"$Target`""
