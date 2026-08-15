@@ -21,9 +21,9 @@
 .extra-label + .episode-rail .episode-card{width:300px;min-width:300px}
 .extra-label + .episode-rail .episode-thumb{width:300px;height:90px}
 
-.player-timeline-row .progress.player-focusable{outline:none;cursor:pointer;position:relative;overflow:visible}
-.player-timeline-row .progress.player-focusable.focused{height:13px;box-shadow:0 0 0 5px #fff,0 9px 26px rgba(0,0,0,.55)}
-.player-timeline-row .progress.player-focusable.focused span{height:13px}
+.player-timeline-row .progress.player-timeline-focusable{outline:none;cursor:pointer;position:relative;overflow:visible}
+.player-timeline-row .progress.player-timeline-focusable.focused{height:13px;box-shadow:0 0 0 5px #fff,0 9px 26px rgba(0,0,0,.55)}
+.player-timeline-row .progress.player-timeline-focusable.focused span{height:13px}
 .player-scrub-fill{position:absolute;left:0;top:0;height:100%;width:0;background:#a979ff;border-radius:7px;z-index:3;pointer-events:none;transition:width .08s linear}
 .player-seek-preview{display:none;position:absolute;top:-62px;transform:translateX(-50%);min-width:108px;padding:9px 13px;border-radius:10px;background:rgba(8,8,12,.96);border:2px solid rgba(255,255,255,.75);font-size:22px;font-weight:800;line-height:1;color:#fff;text-align:center;z-index:5;pointer-events:none;transition:left .08s linear}
 .player-timeline-row .progress.scrubbing{box-shadow:0 0 0 5px #fff,0 12px 32px rgba(0,0,0,.60)}
