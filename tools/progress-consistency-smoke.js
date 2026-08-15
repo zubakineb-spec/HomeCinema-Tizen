@@ -28,6 +28,7 @@ let continueCalls = 0;
 let rebuildCalls = 0;
 let closeCalls = 0;
 let restoreCalls = 0;
+let lifecycleResetCalls = 0;
 let avCurrent = 0;
 let avDuration = 0;
 
@@ -57,6 +58,7 @@ const context = {
   fetch: deferredPost,
   clearPlayerTimer: function() {},
   clearSaveTimer: function() {},
+  resetLifecycleState: function() { lifecycleResetCalls++; },
   closeAv: function() { closeCalls++; },
   restorePlayerScreen: function() { restoreCalls++; },
   loadContinue: function() { continueCalls++; return Promise.resolve(); },
@@ -86,6 +88,7 @@ function reset() {
   rebuildCalls = 0;
   closeCalls = 0;
   restoreCalls = 0;
+  lifecycleResetCalls = 0;
   context.state.seekBusy = false;
   context.state.pendingStop = null;
   context.state.current = null;
@@ -114,6 +117,7 @@ async function main() {
   assert.strictEqual(almostDone.duration_ms, 100000, 'stop must fall back to last observed duration');
   assert.strictEqual(almostDone.completed, true, '96% playback must remain completed on manual stop');
   assert.strictEqual(context.state.player, null, 'player state should close immediately');
+  assert.strictEqual(lifecycleResetCalls, 1, 'stop must reset lifecycle state once');
   assert.strictEqual(continueCalls, 0, 'continue shelf must wait for progress POST');
   assert.strictEqual(rebuildCalls, 0, 'focus rebuild must wait for progress POST');
 
@@ -138,6 +142,7 @@ async function main() {
   context.stopPlayer(false);
   const halfDone = JSON.parse(requests[0].opts.body);
   assert.strictEqual(halfDone.completed, false, '50% playback must stay resumable');
+  assert.strictEqual(lifecycleResetCalls, 1, 'normal stop must reset lifecycle state once');
   resolvePost({ok: true});
   await flushAsyncChain();
 
@@ -147,6 +152,7 @@ async function main() {
   console.log('PASS: 96% stop persists completed=true');
   console.log('PASS: AVPlay zero-time shutdown uses last progress snapshot');
   console.log('PASS: continue shelf refresh waits for progress POST');
+  console.log('PASS: lifecycle state resets on stop');
   console.log('PASS: mid-playback stop remains resumable');
   console.log('HOME_CINEMA_PROGRESS_CONSISTENCY_SMOKE=PASS');
 }
