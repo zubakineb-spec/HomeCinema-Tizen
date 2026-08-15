@@ -18,7 +18,7 @@ function extract(start, end) {
 const code = [
   extract('function avAvailable(){', 'function clearPlayerTimer(){'),
   extract('function resetLifecycleState(){', 'function createAvObject(){'),
-  extract('function handlePlayerVisibility(){', 'function beginPlayback('),
+  extract('function restorePausedTrackSwitch(', 'function beginPlayback('),
   extract('function seek(delta', 'function parseExtra(v){'),
   extract('function selectPlayerTrack(', 'function disableSubtitles(){')
 ].join('\n');
@@ -31,6 +31,7 @@ let playCalls = 0;
 let selectTrackCalls = 0;
 let refreshCalls = 0;
 let openPanelCalls = 0;
+let menuCalls = 0;
 let forward = null;
 let backward = null;
 let timers = [];
@@ -42,7 +43,7 @@ const context = {
   console,
   document: documentState,
   state: {
-    player: {token: 1, phase: 'playing'},
+    player: {token: 1, phase: 'playing', restorePausedAfterTrackSwitch: false},
     seekBusy: false,
     pendingStop: null,
     lifecycleSuspended: false,
@@ -53,7 +54,7 @@ const context = {
     avplay: {
       getState() { return avState; },
       suspend() { suspendCalls++; },
-      restore() { restoreCalls++; },
+      restore() { restoreCalls++; avState = 'PLAYING'; },
       jumpForward(ms, ok, fail) { forward = {ms, ok, fail}; },
       jumpBackward(ms, ok, fail) { backward = {ms, ok, fail}; },
       play() { playCalls++; avState = 'PLAYING'; },
@@ -63,7 +64,7 @@ const context = {
   },
   hidePlayerMenu() { hideMenuCalls++; },
   runPostStart() {},
-  showPlayerMenu() {},
+  showPlayerMenu() { menuCalls++; },
   refreshPlayerTrackSummary() { refreshCalls++; },
   openPlayerPanel() { openPanelCalls++; },
   syncToggleButton() {},
@@ -84,6 +85,7 @@ function resetCounters() {
   selectTrackCalls = 0;
   refreshCalls = 0;
   openPanelCalls = 0;
+  menuCalls = 0;
   forward = null;
   backward = null;
   timers = [];
@@ -91,10 +93,11 @@ function resetCounters() {
 
 function main() {
   resetCounters();
-  context.state.player = {token: 1, phase: 'playing'};
+  context.state.player = {token: 1, phase: 'playing', restorePausedAfterTrackSwitch: false};
   context.state.seekBusy = false;
   context.state.lifecycleSuspended = false;
   context.state.pendingVisibility = false;
+  context.state.postStartPending = null;
   documentState.hidden = true;
   avState = 'PLAYING';
 
@@ -111,7 +114,7 @@ function main() {
   assert.strictEqual(context.state.lifecycleSuspended, false, 'restore must clear suspended state');
 
   resetCounters();
-  context.state.player = {token: 2, phase: 'playing'};
+  context.state.player = {token: 2, phase: 'playing', restorePausedAfterTrackSwitch: false};
   context.state.seekBusy = false;
   context.state.pendingStop = null;
   context.state.lifecycleSuspended = false;
@@ -132,23 +135,54 @@ function main() {
   assert.strictEqual(context.state.lifecycleSuspended, true, 'deferred suspend must update lifecycle state');
 
   resetCounters();
-  context.state.player = {token: 10, phase: 'playing', subtitleOff: true};
+  context.state.player = {token: 10, phase: 'playing', subtitleOff: true, restorePausedAfterTrackSwitch: false};
   context.state.seekBusy = false;
   context.state.lifecycleSuspended = false;
   avState = 'PAUSED';
   context.selectPlayerTrack('AUDIO', 2, null);
   assert.strictEqual(playCalls, 1, 'audio track switch from PAUSED must temporarily resume playback');
   assert.strictEqual(selectTrackCalls, 1, 'audio track must be selected once');
+  assert.strictEqual(context.state.player.restorePausedAfterTrackSwitch, true, 'temporary resume must remember paused intent');
   assert.strictEqual(timers.length, 2, 'track switch schedules pause restore and panel refresh');
 
-  context.state.player = {token: 11, phase: 'playing', subtitleOff: true};
+  context.state.player = {token: 11, phase: 'playing', subtitleOff: true, restorePausedAfterTrackSwitch: false};
   timers.forEach(function(fn) { fn(); });
   assert.strictEqual(pauseCalls, 0, 'stale track-switch timer must not pause a newer playback session');
   assert.strictEqual(refreshCalls, 0, 'stale track-switch timer must not refresh a newer session');
   assert.strictEqual(openPanelCalls, 0, 'stale track-switch timer must not reopen controls for a newer session');
 
+  // Critical Tizen 4 edge: AUDIO switch starts from PAUSED, temporarily calls play(),
+  // then the TV sends the app to background before the 120 ms re-pause timer fires.
+  // Restore must honor the original PAUSED intent rather than continue playback.
   resetCounters();
-  context.state.player = {token: 12, phase: 'playing', subtitleOff: true};
+  context.state.player = {token: 20, phase: 'playing', subtitleOff: true, restorePausedAfterTrackSwitch: false};
+  context.state.seekBusy = false;
+  context.state.lifecycleSuspended = false;
+  context.state.pendingVisibility = false;
+  context.state.postStartPending = null;
+  documentState.hidden = false;
+  avState = 'PAUSED';
+  context.selectPlayerTrack('AUDIO', 4, null);
+  assert.strictEqual(avState, 'PLAYING', 'audio switch temporarily resumes a paused player');
+  assert.strictEqual(context.state.player.restorePausedAfterTrackSwitch, true, 'paused intent must be retained before backgrounding');
+
+  documentState.hidden = true;
+  context.handlePlayerVisibility();
+  assert.strictEqual(context.state.lifecycleSuspended, true, 'temporary playing state must still suspend in background');
+  const pendingTimers = timers.slice();
+  pendingTimers.forEach(function(fn) { fn(); });
+  assert.strictEqual(pauseCalls, 0, 're-pause timer must defer while lifecycle is suspended');
+  assert.strictEqual(context.state.player.restorePausedAfterTrackSwitch, true, 'paused intent must survive suspended timers');
+
+  documentState.hidden = false;
+  context.handlePlayerVisibility();
+  assert.strictEqual(restoreCalls, 1, 'backgrounded track switch must restore AVPlay once');
+  assert.strictEqual(pauseCalls, 1, 'restore must return temporary AUDIO-switch playback to PAUSED');
+  assert.strictEqual(avState, 'PAUSED', 'player must remain paused after lifecycle restore');
+  assert.strictEqual(context.state.player.restorePausedAfterTrackSwitch, false, 'paused intent flag must clear after restoration');
+
+  resetCounters();
+  context.state.player = {token: 12, phase: 'playing', subtitleOff: true, restorePausedAfterTrackSwitch: false};
   context.state.seekBusy = false;
   context.state.lifecycleSuspended = true;
   avState = 'PLAYING';
@@ -157,10 +191,12 @@ function main() {
 
   assert(source.includes("if(document.hidden){handlePlayerVisibility();state.postStartPending={token:token,url:url};return}"), 'prepareAsync completion must suspend/defer post-start work when hidden');
   assert(source.includes('if(!state.player||state.player.token!==token)return;\n  var finished=false;'), 'restoreProgress must reject stale playback tokens before locking seek state');
+  assert(source.includes('restorePausedTrackSwitch(p);'), 'lifecycle restore must enforce saved PAUSED intent');
 
   console.log('PASS: suspend/restore lifecycle state');
   console.log('PASS: lifecycle transition deferred across seek');
   console.log('PASS: stale audio-track timers isolated by player token');
+  console.log('PASS: paused AUDIO switch survives background/restore');
   console.log('PASS: track changes blocked while suspended');
   console.log('PASS: hidden prepare completion defers post-start AVPlay work');
   console.log('HOME_CINEMA_LIFECYCLE_SMOKE=PASS');
