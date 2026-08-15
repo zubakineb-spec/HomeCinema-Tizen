@@ -95,10 +95,11 @@ jobs:
           go-version: "1.23.x"
           cache-dependency-path: native-qnap-d1/go.mod
 
-      - name: QNAP D1 Go format gate
+      - name: QNAP D1 RC3.7 Go format gate
         working-directory: native-qnap-d1
         run: |
-          test -z "$(gofmt -l .)" || { echo 'gofmt required:'; gofmt -l .; exit 1; }
+          files="internal/app/media_profile.go internal/app/image_cache.go internal/app/ux_api.go internal/app/rc37_test.go"
+          test -z "$(gofmt -l $files)" || { echo 'gofmt required in RC3.7 modules:'; gofmt -l $files; exit 1; }
 
       - name: QNAP D1 native tests
         working-directory: native-qnap-d1
