@@ -21,6 +21,7 @@ function extract(start, end) {
 
 const playerFunctions = [
   extract('function restoreProgress(', 'function saveProgress('),
+  extract('function formatPlayerTime(ms){', 'function updateProgress(pos,dur){'),
   extract('function updateProgress(pos,dur){', 'function stopPlayer(completed){'),
   extract('function playerToggle(){', 'function seek(delta'),
   extract('function seek(delta', 'function parseExtra(v){'),
@@ -103,8 +104,6 @@ async function flushPromises() {
 }
 
 async function main() {
-  // 1. Autosave must persist the latest observed position, not the value captured
-  // when the five-second timer was created.
   timers = [];
   saves = [];
   context.state.player = {token: 7, url: 'media://progress', phase: 'playing', lastPosition: 0, lastDuration: 0};
@@ -118,7 +117,6 @@ async function main() {
   assert.strictEqual(saves[0].dur, 100000, 'autosave must use latest duration');
   assert.strictEqual(saves[0].completed, false, '7% must not be marked completed');
 
-  // 2. Pause/resume must toggle the AVPlay state and refresh the chrome.
   avState = 'PLAYING';
   menuCalls = 0;
   toggleSyncCalls = 0;
@@ -131,7 +129,6 @@ async function main() {
   assert.strictEqual(toggleSyncCalls, 2, 'toggle UI must be refreshed twice');
   assert.strictEqual(menuCalls, 2, 'player menu must remain visible after toggle');
 
-  // 3. jumpForward/jumpBackward must be serialized until the Samsung callback.
   forwardCalls = [];
   backwardCalls = [];
   stopCalls = [];
@@ -154,7 +151,6 @@ async function main() {
   backwardCalls[0].ok();
   assert.deepStrictEqual(stopCalls, [true], 'stop requested during seek must run after callback');
 
-  // 4. Restoring progress must not report completion until seekTo callback fires.
   apiResult = {position_ms: 32000, completed: 0};
   context.state.player = {token: 22, url: 'media://resume', phase: 'playing'};
   context.state.seekBusy = false;
@@ -173,13 +169,10 @@ async function main() {
   assert.strictEqual(context.state.seekBusy, false, 'restore seek callback must release lock');
   assert.strictEqual(restoreResult, true, 'restore completion must propagate success');
 
-  // 5. Media key batch must contain only keys actually supported by the TV.
   batchKeys = null;
   context.registerKeys();
   assert.deepStrictEqual(batchKeys, ['MediaPlayPause', 'MediaStop'], 'unsupported media keys must be filtered out');
 
-  // 6. Browser shim must never replace native Tizen APIs and must emulate the
-  // asynchronous seek callbacks used by the production player state machine.
   assert(shim.includes("if(typeof window.tizen!=='undefined')return;"), 'browser shim must exit on native Tizen');
   assert(shim.includes('seekTo:function(ms,onSuccess,onError)'), 'browser shim seekTo must expose callbacks');
   assert(shim.includes('jumpForward:function(ms,onSuccess,onError)'), 'browser shim jumpForward must expose callbacks');
