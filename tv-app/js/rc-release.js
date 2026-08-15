@@ -38,6 +38,23 @@ function playerVisible(){
   var p=document.getElementById('player');
   return !!p&&!p.classList.contains('hidden');
 }
+function hidden(id){
+  var x=document.getElementById(id);
+  return !x||x.classList.contains('hidden');
+}
+function rootScreenActive(){
+  return !playerVisible()&&hidden('details')&&hidden('searchOverlay')&&!aboutOpen();
+}
+function exitApplication(){
+  try{
+    if(typeof tizen!=='undefined'&&tizen.application&&tizen.application.getCurrentApplication){
+      tizen.application.getCurrentApplication().exit();
+      return true;
+    }
+  }catch(e){console.warn('Application exit failed',e)}
+  try{window.close();return true}catch(_){}
+  return false;
+}
 function handleDedicatedMediaKey(code,e){
   if(code!==415&&code!==19)return false;
   if(!playerVisible()||!window.webapis||!window.webapis.avplay)return false;
@@ -59,6 +76,9 @@ window.addEventListener('keydown',function(e){
   if(aboutOpen()){
     if(code===10009||code===27||code===13){consume(e);closeAbout();return}
     if(code===37||code===38||code===39||code===40){consume(e);return}
+  }
+  if((code===10009||code===27)&&rootScreenActive()){
+    consume(e);exitApplication();return;
   }
   handleDedicatedMediaKey(code,e);
 },true);
