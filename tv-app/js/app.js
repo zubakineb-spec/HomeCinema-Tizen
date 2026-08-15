@@ -20,6 +20,8 @@ var state={
   playerToken:0,
   playerTimer:null,
   saveTimer:null,
+  seekBusy:false,
+  pendingStop:null,
   searchTimer:null
 };
 var $=function(s,root){return (root||document).querySelector(s)};
@@ -314,6 +316,7 @@ function runSearch(){
 
 function avAvailable(){return typeof webapis!=='undefined'&&webapis.avplay}
 function clearPlayerTimer(){if(state.playerTimer){clearTimeout(state.playerTimer);state.playerTimer=null}}
+function clearSaveTimer(){if(state.saveTimer){clearTimeout(state.saveTimer);state.saveTimer=null}}
 function createAvObject(){
   var host=$('#avHost');if(!host)return;
   host.innerHTML='';
@@ -343,7 +346,7 @@ function restorePlayerScreen(){
 }
 function failPlayback(message,token){
   if(token&&(!state.player||token!==state.player.token))return;
-  clearPlayerTimer();closeAv();restorePlayerScreen();
+  clearPlayerTimer();clearSaveTimer();state.seekBusy=false;state.pendingStop=null;closeAv();restorePlayerScreen();
   state.tracksOpen=false;state.player=null;state.mode=state.current?'details':'home';
   toast(message||'Видео не запустилось',5000);
   setTimeout(function(){rebuildFocus($('#detailPlay')||null)},40);
@@ -391,10 +394,11 @@ function beginPlayback(token,url){
 function startPlayback(url,title){
   if(!url){toast('У файла нет адреса воспроизведения');return}
   if(state.player){toast('Видео уже запускается');return}
+  clearSaveTimer();state.seekBusy=false;state.pendingStop=null;
   state.playerToken++;
   var token=state.playerToken;
   state.mode='player';state.tracksOpen=false;
-  state.player={token:token,url:url,title:title||'Видео',phase:'boot',subtitleOff:true};
+  state.player={token:token,url:url,title:title||'Видео',phase:'boot',subtitleOff:true,lastPosition:0,lastDuration:0};
   $('#playerTitle').textContent=title||'Видео';$('#playerProgress').style.width='0%';
   $('#playerCurrentTime').textContent='00:00';$('#playerDurationTime').textContent='00:00';
   $('#playerBootText').textContent='Запуск видео…';
@@ -423,11 +427,22 @@ function updateProgress(pos,dur){
   $('#playerProgress').style.width=pct+'%';
   $('#playerCurrentTime').textContent=formatPlayerTime(pos);
   $('#playerDurationTime').textContent=formatPlayerTime(dur);
-  if(!state.saveTimer){state.saveTimer=setTimeout(function(){state.saveTimer=null;if(state.player)saveProgress(pos,dur,pct>95,state.player)},5000)}
+  if(state.player){state.player.lastPosition=Number(pos||0);state.player.lastDuration=Number(dur||0)}
+  if(!state.saveTimer&&state.player){
+    var token=state.player.token;
+    state.saveTimer=setTimeout(function(){
+      state.saveTimer=null;
+      var pl=state.player;
+      if(!pl||pl.token!==token)return;
+      var p=Number(pl.lastPosition||0),d=Number(pl.lastDuration||0);
+      saveProgress(p,d,d>0&&(p/d)>0.95,pl);
+    },5000);
+  }
 }
 function stopPlayer(completed){
   if(!state.player)return;
-  var pl=state.player,pos=0,dur=0;clearPlayerTimer();
+  if(state.seekBusy){state.pendingStop={completed:!!completed};return}
+  var pl=state.player,pos=0,dur=0;clearPlayerTimer();clearSaveTimer();state.pendingStop=null;
   try{var p=webapis.avplay;pos=p.getCurrentTime();dur=p.getDuration()}catch(_){}
   closeAv();saveProgress(pos,dur,completed,pl);restorePlayerScreen();
   state.player=null;state.tracksOpen=false;state.playerMenuOpen=false;state.playerPanel=null;state.mode=state.current?'details':'home';
@@ -442,12 +457,27 @@ function syncToggleButton(){
   $('#playerStateText').textContent=paused?'Пауза':'Воспроизведение';
 }
 function playerToggle(){
-  if(!state.player||state.player.phase!=='playing')return;
+  if(!state.player||state.player.phase!=='playing'||state.seekBusy)return;
   try{var p=webapis.avplay,st=p.getState();if(st==='PLAYING')p.pause();else if(st==='PAUSED')p.play();syncToggleButton();showPlayerMenu('#playerToggleButton')}catch(e){toast('Пауза недоступна')}
 }
-function seek(delta){
-  if(!state.player||state.player.phase!=='playing')return;
-  try{if(delta>0)webapis.avplay.jumpForward(delta);else webapis.avplay.jumpBackward(Math.abs(delta))}catch(_){}
+function seek(delta,onDone){
+  if(!state.player||state.player.phase!=='playing'||state.seekBusy)return;
+  state.seekBusy=true;
+  var finished=false;
+  function finish(ok,error){
+    if(finished)return;
+    finished=true;state.seekBusy=false;
+    if(error)console.warn('AVPlay seek failed',error);
+    var pending=state.pendingStop;state.pendingStop=null;
+    if(pending){stopPlayer(pending.completed);return}
+    if(onDone)try{onDone(ok)}catch(_){}
+  }
+  try{
+    var success=function(){finish(true,null)};
+    var failure=function(e){finish(false,e)};
+    if(delta>0)webapis.avplay.jumpForward(delta,success,failure);
+    else webapis.avplay.jumpBackward(Math.abs(delta),success,failure);
+  }catch(e){finish(false,e)}
 }
 function parseExtra(v){if(v&&typeof v==='object')return v;try{return JSON.parse(v||'{}')}catch(_){return {}}}
 function isDtsTrack(i){var x=parseExtra(i&&i.extra_info),c=String(x.fourCC||'').toUpperCase();return c.indexOf('DTS')>=0||c.indexOf('DCA')>=0}
@@ -525,7 +555,7 @@ function settingOption(track,type,selected){
   return '<button class="player-setting-option player-focusable '+(selected?'selected':'')+'" data-track="'+type+'" data-index="'+track.index+'"><span class="setting-main">'+esc(d.name)+'</span><span class="setting-meta">'+esc(d.meta||((type==='AUDIO')?'Аудиодорожка':'Субтитры'))+'</span></button>';
 }
 function openPlayerPanel(kind){
-  if(!state.player||state.player.phase!=='playing')return;
+  if(!state.player||state.player.phase!=='playing'||state.seekBusy)return;
   clearPlayerMenuTimer();state.playerMenuOpen=true;state.playerPanel=kind;state.playerFocusIndex=0;
   $('#playerChrome').classList.remove('hidden');$('#playerSettings').classList.remove('hidden');
   var snap=getTrackSnapshot(),html='',title=kind==='audio'?'Аудио':'Субтитры';
@@ -546,7 +576,7 @@ function closePlayerPanel(){
   refreshPlayerTrackSummary();focusPlayer(old==='audio'?$('#playerAudioButton'):$('#playerSubtitleButton'));schedulePlayerMenuHide();
 }
 function selectPlayerTrack(type,index,button){
-  if(!state.player||state.player.phase!=='playing'||!avAvailable())return;
+  if(!state.player||state.player.phase!=='playing'||state.seekBusy||!avAvailable())return;
   try{
     var p=webapis.avplay,wasPaused=false;try{wasPaused=p.getState()==='PAUSED'}catch(_){}
     if(type==='AUDIO'&&wasPaused){p.play()}
@@ -579,7 +609,7 @@ function handleClick(e){
   var playerAction=closest(e.target,'[data-player-action]');
   if(playerAction&&state.player&&state.player.phase==='playing'){
     var action=playerAction.dataset.playerAction;
-    if(action==='toggle')playerToggle();else if(action==='rewind'){seek(-10000);showPlayerMenu('[data-player-action=\"rewind\"]')}else if(action==='forward'){seek(10000);showPlayerMenu('[data-player-action=\"forward\"]')}
+    if(action==='toggle')playerToggle();else if(action==='rewind'){seek(-10000,function(){showPlayerMenu('[data-player-action=\"rewind\"]')})}else if(action==='forward'){seek(10000,function(){showPlayerMenu('[data-player-action=\"forward\"]')})}
     return;
   }
   var playerPanel=closest(e.target,'[data-player-panel]');if(playerPanel&&state.player&&state.player.phase==='playing'){openPlayerPanel(playerPanel.dataset.playerPanel);return}
@@ -604,9 +634,20 @@ function handleClick(e){
 function registerKeys(){
   try{
     if(typeof tizen==='undefined'||!tizen.tvinputdevice)return;
-    var keys=['MediaPlayPause','MediaPlay','MediaPause','MediaFastForward','MediaRewind','MediaStop'];
-    if(tizen.tvinputdevice.registerKeyBatch)tizen.tvinputdevice.registerKeyBatch(keys);
-    else keys.forEach(function(k){try{tizen.tvinputdevice.registerKey(k)}catch(_){}});
+    var manager=tizen.tvinputdevice;
+    var wanted=['MediaPlayPause','MediaPlay','MediaPause','MediaFastForward','MediaRewind','MediaStop'];
+    var supported=null;
+    try{
+      supported={};
+      (manager.getSupportedKeys()||[]).forEach(function(k){if(k&&k.name)supported[k.name]=true});
+    }catch(_){supported=null}
+    var keys=supported?wanted.filter(function(k){return !!supported[k]}):wanted.slice();
+    function registerIndividually(){keys.forEach(function(k){try{manager.registerKey(k)}catch(e){console.warn('Key registration failed',k,e)}})}
+    if(!keys.length)return;
+    if(manager.registerKeyBatch){
+      try{manager.registerKeyBatch(keys,function(){},function(e){console.warn('Batch key registration failed',e);registerIndividually()})}
+      catch(e){console.warn('Batch key registration exception',e);registerIndividually()}
+    }else registerIndividually();
   }catch(e){console.warn(e)}
 }
 function key(e){
@@ -635,8 +676,8 @@ function key(e){
       if(code===38||code===40){consume(e);return false}
     }
     if(code===13||code===38||code===40){consume(e);showPlayerMenu('#playerToggleButton');return false}
-    if(code===37||code===412){consume(e);seek(-10000);showPlayerMenu('[data-player-action=\"rewind\"]');return false}
-    if(code===39||code===417){consume(e);seek(10000);showPlayerMenu('[data-player-action=\"forward\"]');return false}
+    if(code===37||code===412){consume(e);seek(-10000,function(){showPlayerMenu('[data-player-action=\"rewind\"]')});return false}
+    if(code===39||code===417){consume(e);seek(10000,function(){showPlayerMenu('[data-player-action=\"forward\"]')});return false}
     return;
   }
   if([37,38,39,40,13].indexOf(code)>=0){

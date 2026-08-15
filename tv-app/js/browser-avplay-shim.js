@@ -5,6 +5,7 @@
 // On a real Samsung TV the native webapis.avplay object already exists and
 // this file exits without changing the platform API.
 if(window.webapis&&window.webapis.avplay)return;
+if(typeof window.tizen!=='undefined')return;
 
 var video=null;
 var listener={};
@@ -88,8 +89,8 @@ var avplay={
   getCurrentTime:function(){return Math.round((ensureVideo().currentTime||0)*1000)},
   getDuration:function(){return durationMs()},
   seekTo:function(ms){ensureVideo().currentTime=Math.max(0,Number(ms||0)/1000)},
-  jumpForward:function(ms){var v=ensureVideo();v.currentTime=Math.min(isFinite(v.duration)?v.duration:Infinity,v.currentTime+Math.max(0,Number(ms||0))/1000)},
-  jumpBackward:function(ms){var v=ensureVideo();v.currentTime=Math.max(0,v.currentTime-Math.max(0,Number(ms||0))/1000)},
+  jumpForward:function(ms,onSuccess,onError){try{var v=ensureVideo();v.currentTime=Math.min(isFinite(v.duration)?v.duration:Infinity,v.currentTime+Math.max(0,Number(ms||0))/1000);if(onSuccess)setTimeout(onSuccess,0)}catch(e){if(onError)onError(e);else throw e}},
+  jumpBackward:function(ms,onSuccess,onError){try{var v=ensureVideo();v.currentTime=Math.max(0,v.currentTime-Math.max(0,Number(ms||0))/1000);if(onSuccess)setTimeout(onSuccess,0)}catch(e){if(onError)onError(e);else throw e}},
   getTotalTrackInfo:function(){return []},
   getCurrentStreamInfo:function(){return []},
   setSelectTrack:function(){},
