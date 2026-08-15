@@ -154,20 +154,20 @@ async function main() {
   apiResult = {position_ms: 32000, completed: 0};
   context.state.player = {token: 22, url: 'media://resume', phase: 'playing'};
   context.state.seekBusy = false;
-  let restoreResult = null;
+  let restoreCallbacks = 0;
   let restoreSeek = null;
   const restorePlayer = {
     seekTo(ms, ok, fail) { restoreSeek = {ms, ok, fail}; }
   };
-  context.restoreProgress('media://resume', restorePlayer, 22, function(ok) { restoreResult = ok; });
+  context.restoreProgress('media://resume', restorePlayer, 22, function() { restoreCallbacks++; });
   await flushPromises();
   assert(restoreSeek, 'restore should call seekTo for positions over 15 seconds');
   assert.strictEqual(restoreSeek.ms, 32000, 'restore should seek to saved position');
   assert.strictEqual(context.state.seekBusy, true, 'restore seek must lock AVPlay API usage');
-  assert.strictEqual(restoreResult, null, 'restore callback must wait for seekTo callback');
+  assert.strictEqual(restoreCallbacks, 0, 'restore callback must wait for seekTo callback');
   restoreSeek.ok();
   assert.strictEqual(context.state.seekBusy, false, 'restore seek callback must release lock');
-  assert.strictEqual(restoreResult, true, 'restore completion must propagate success');
+  assert.strictEqual(restoreCallbacks, 1, 'restore completion callback must run exactly once');
 
   batchKeys = null;
   context.registerKeys();
