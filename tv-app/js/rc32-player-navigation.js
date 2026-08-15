@@ -53,6 +53,24 @@ function focusControl(){
   clearPlayerFocus();c.classList.add('focused');try{c.focus()}catch(_){}
 }
 function timelineFocused(){var t=timeline();return !!t&&(document.activeElement===t||t.classList.contains('focused'))}
+function resetInactivePlayerNavigation(){
+  if(playerActive())return false;
+  scrubActive=false;scrubWasPlaying=false;seekInFlight=false;
+  var t=timeline();
+  if(t){
+    t.classList.remove('focused');t.classList.remove('scrubbing');
+    var fill=$('#playerScrubFill',t),preview=$('#playerSeekPreview',t);
+    if(fill)fill.style.width='0%';
+    if(preview)preview.style.display='none';
+  }
+  clearPlayerFocus();
+  try{
+    var active=document.activeElement;
+    if(active&&closest(active,'#player')&&active.blur)active.blur();
+  }catch(_){}
+  lastControl=null;
+  return true;
+}
 function hideScrubUi(delay){
   nativeSetTimeout(function(){
     var ui=ensureScrubUi();if(!ui||scrubActive)return;
@@ -143,6 +161,7 @@ document.addEventListener('focusin',function(e){
 
 window.addEventListener('keydown',function(e){
   var code=Number(e.keyCode||e.which||0);
+  if(resetInactivePlayerNavigation())return;
   if(!playerChromeVisible()||settingsOpen())return;
 
   if(timelineFocused()){
