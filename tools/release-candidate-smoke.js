@@ -8,6 +8,7 @@ const root = path.resolve(__dirname, '..');
 const html = fs.readFileSync(path.join(root, 'tv-app', 'index.html'), 'utf8');
 const app = fs.readFileSync(path.join(root, 'tv-app', 'js', 'app.js'), 'utf8');
 const rc = fs.readFileSync(path.join(root, 'tv-app', 'js', 'rc-release.js'), 'utf8');
+const selectionSync = fs.readFileSync(path.join(root, 'tv-app', 'js', 'rc3-selection-sync.js'), 'utf8');
 const rc3 = fs.readFileSync(path.join(root, 'tv-app', 'js', 'rc3-fixes.js'), 'utf8');
 const css = fs.readFileSync(path.join(root, 'tv-app', 'css', 'rc-release.css'), 'utf8');
 const rc3css = fs.readFileSync(path.join(root, 'tv-app', 'css', 'rc3-fixes.css'), 'utf8');
@@ -18,6 +19,8 @@ assert(html.includes('id="aboutBack"'), 'About overlay must have a remote-friend
 assert(html.includes('This product uses the TMDB API but is not endorsed or certified by TMDB.'), 'TMDB attribution notice must be present');
 assert(/https:\/\/www\.themoviedb\.org\/assets\/.*\.svg/.test(html), 'About must use an official TMDB SVG asset URL');
 assert(html.indexOf('js/rc-release.js') < html.indexOf('js/app.js'), 'RC capture handlers must load before app.js');
+assert(html.indexOf('js/rc3-selection-sync.js') < html.indexOf('js/rc3-fixes.js'), 'hero selection sync must preempt older RC3 hero interception');
+assert(html.indexOf('js/rc3-selection-sync.js') < html.indexOf('js/app.js'), 'hero selection sync must load before app.js');
 assert(html.indexOf('js/rc3-fixes.js') < html.indexOf('js/app.js'), 'RC3 key/persistence hooks must load before app.js');
 assert(html.includes('css/rc-release.css'), 'release styles must be loaded');
 assert(html.includes('css/rc3-fixes.css'), 'RC3 layout styles must be loaded');
@@ -39,6 +42,13 @@ assert(app.includes("if(code===39||code===417)"), 'right/MediaFastForward must s
 assert(css.includes('.about-overlay'), 'About overlay styles must exist');
 assert(css.includes('.tmdb-logo'), 'TMDB logo must have explicit TV-safe sizing');
 
+assert(selectionSync.includes('heroSelection'), 'hero sync must keep an explicit selected type/id state');
+assert(selectionSync.includes('selectionFromCard'), 'hero sync must derive selection from the focused media card');
+assert(selectionSync.includes('data-card-type'), 'hero sync must retain media type together with ID');
+assert(selectionSync.includes('data-id'), 'hero sync must retain the exact catalog ID');
+assert(selectionSync.includes('stopImmediatePropagation'), 'hero sync must prevent stale app.js hero handlers from also running');
+assert(selectionSync.includes('card.click()'), 'hero actions must route through the exact selected catalog card');
+
 assert(rc3.includes('homecinema.playerPrefs.v1'), 'RC3 must persist player preferences');
 assert(rc3.includes('setSilentSubtitle'), 'RC3 must restore subtitle preference through AVPlay');
 assert(rc3.includes('rememberTrack'), 'RC3 must remember selected audio/text tracks');
@@ -54,6 +64,7 @@ console.log('PASS: Smart Remote dedicated Play/Pause keys');
 console.log('PASS: details/search/series focus contracts');
 console.log('PASS: About/Credits remote flow');
 console.log('PASS: TMDB attribution notice and official logo URL');
+console.log('PASS: RC3 hero selection is bound to exact media type/id');
 console.log('PASS: RC3 featured hero and compact home layout');
 console.log('PASS: RC3 episode descriptions');
 console.log('PASS: RC3 player preference persistence and focused timeline seek');
