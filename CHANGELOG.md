@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.3.18 RC3.7 engineering - 2026-08-15
+
+- Added one-command `RELEASE-TV.ps1` pipeline for local tests, signed WGT build, package verification, SHA-256 manifest and optional TV install; installation is opt-in through `-Install` and is not part of the default release path.
+- Reworked `INSTALL-SAMSUNG-WGT.ps1` to support the real SDB serial / TV IP path while retaining legacy named targets.
+- Added QNAP-side TMDB artwork caching through `/api/image`; Samsung clients map TMDB artwork to the NAS cache and can reuse the cached catalog when the NAS is temporarily unavailable.
+- Added resilient TV-to-NAS networking: GET retry/backoff, online/offline state, cached catalog/details/search, queued playback progress and automatic queue flush after reconnect.
+- Added `/api/diagnostics` plus a TV diagnostics/settings screen with backend status, endpoint, runtime, ffprobe/FFmpeg readiness, image-cache counts, AVPlay state and current media source.
+- Persist media compatibility profiles during scan: container, video codec, resolution, HDR flag, audio/subtitle codecs and `direct` / `dts_only` / `review` classification.
+- Added streaming UX: viewing history, favorites, sort/filter, watched/progress markers, Continue/Start Over, compatibility badges and next-episode lookup/autoplay countdown.
+- Added player UX: 10→30→60 second accelerated timeline scrub while holding Left/Right, per-series audio/subtitle preference restore and configurable subtitle size.
+- Added incremental QNAP scanning based on source URL + file size + mtime so unchanged files reuse existing media profiles while new/changed files are re-profiled and removed files are counted.
+- Hardened `catalog.json` and `progress.json` persistence with file fsync, atomic rename, directory sync, three backup generations and automatic recovery from the newest valid backup.
+- Added dedicated RC3.7 JavaScript and Go regression tests and CI gates. This engineering candidate has not yet been installed on the physical TV.
+
+## 0.3.18 RC3.6 - 2026-08-15
+
+- Confirmed signed WGT installation and launch on the physical Samsung UE49NU7500U.
+- Restored D-pad navigation after leaving the player by clearing stale hidden timeline focus before legacy remote handlers run.
+- Added regression coverage proving the first Left/Right press after player exit remains available to catalog navigation.
+- Fixed `Back` on the root Home Cinema screen to call the Tizen application exit API while preserving nested Back behavior in player, details, search and About.
+- `HomeCinema-Tizen-v0.3.18-rc3.6.wgt` is the last TV-validated release before the RC3.7 engineering changes.
+
 ## 0.3.8 - 2026-08-09
 
 - Added application-level TMDB DNS recovery for networks where `api.themoviedb.org` is incorrectly resolved to a local address.
