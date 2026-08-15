@@ -55,6 +55,7 @@ jobs:
           node --check tools/root-back-exit-smoke.js
           node --check tools/rc37-enhancements-smoke.js
           node --check tools/player-ux-rc37-smoke.js
+          node --check tools/release-pipeline-smoke.js
           node --check tools/tizen4-compat-smoke.js
           node --check tools/release-candidate-smoke.js
           node --check tools/api-origin-smoke.js
@@ -79,6 +80,9 @@ jobs:
 
       - name: TV RC3.7 player UX gate
         run: node tools/player-ux-rc37-smoke.js
+
+      - name: RC3.7 release pipeline safety gate
+        run: node tools/release-pipeline-smoke.js
 
       - name: Tizen 4 Chromium 56 compatibility gate
         run: node tools/tizen4-compat-smoke.js
