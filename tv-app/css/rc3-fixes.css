@@ -11,16 +11,16 @@
 .rail{height:520px}
 
 .series-area{top:500px;height:580px}
-.episode-rail{height:270px}
+.episode-rail{height:285px}
 .episode-card{width:380px;min-width:380px;margin-right:22px}
-.episode-thumb{width:380px;height:160px}
-.episode-title{font-size:17px;margin-top:9px}
-.episode-meta{font-size:13px;margin-top:3px}
-.episode-overview{font-size:14px;line-height:1.28;color:#b8b8c1;margin-top:6px;height:36px;white-space:normal;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
-.extra-label + .episode-rail{height:170px}
+.episode-thumb{width:380px;height:150px}
+.episode-title{font-size:18px;margin-top:9px}
+.episode-meta{font-size:14px;margin-top:3px}
+.episode-overview{font-size:18px;line-height:1.28;color:#d0d0d7;margin-top:7px;height:47px;white-space:normal;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.extra-label + .episode-rail{height:155px}
 .extra-label + .episode-rail .episode-card{width:300px;min-width:300px}
-.extra-label + .episode-rail .episode-thumb{width:300px;height:110px}
+.extra-label + .episode-rail .episode-thumb{width:300px;height:100px}
 
 .player-timeline-row .progress.player-focusable{outline:none;cursor:pointer}
-.player-timeline-row .progress.player-focusable.focused{height:11px;box-shadow:0 0 0 4px #fff,0 9px 26px rgba(0,0,0,.55)}
-.player-timeline-row .progress.player-focusable.focused span{height:11px}
+.player-timeline-row .progress.player-focusable.focused{height:13px;box-shadow:0 0 0 5px #fff,0 9px 26px rgba(0,0,0,.55)}
+.player-timeline-row .progress.player-focusable.focused span{height:13px}
