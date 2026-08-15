@@ -3,6 +3,21 @@
 (function(){
   'use strict';
 
+  if(typeof window.Response!=='function'){
+    function MiniResponse(body,init){
+      init=init||{};
+      this._body=String(body==null?'':body);
+      this.status=Number(init.status||200);
+      this.ok=this.status>=200&&this.status<300;
+      this.statusText=this.ok?'OK':'ERROR';
+      this.headers=init.headers||{};
+    }
+    MiniResponse.prototype.text=function(){return Promise.resolve(this._body)};
+    MiniResponse.prototype.json=function(){var body=this._body;return Promise.resolve().then(function(){return JSON.parse(body)})};
+    MiniResponse.prototype.clone=function(){return new MiniResponse(this._body,{status:this.status,headers:this.headers})};
+    window.Response=MiniResponse;
+  }
+
   var DEFAULT_BACKEND='http://192.168.0.101:8096';
   var STORAGE_KEY='homecinema.api.base';
 
@@ -32,9 +47,6 @@
     return DEFAULT_BACKEND;
   };
 
-  // Tizen Studio can launch an imported WGT with an http(s) origin. In that mode
-  // app.js intentionally uses root-relative API URLs. Redirect only those API
-  // calls to the configured QNAP backend; absolute media URLs remain untouched.
   var nativeFetch=window.fetch;
   if(typeof nativeFetch==='function'){
     window.fetch=function(input,opts){
