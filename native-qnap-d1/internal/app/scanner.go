@@ -9,6 +9,13 @@ import (
 	"strings"
 )
 
+type ScanStats struct {
+	Files    int `json:"files"`
+	Reused   int `json:"reused"`
+	Profiled int `json:"profiled"`
+	Removed  int `json:"removed"`
+}
+
 func publicURL(base, rel string) string {
 	parts := strings.Split(filepath.ToSlash(rel), "/")
 	for i := range parts {
@@ -31,11 +38,30 @@ func skipQNAPDir(name string) bool {
 }
 
 func ScanLocal(cfg Config) ([]Movie, []Show, []Episode, error) {
+	movies, shows, episodes, _, err := ScanLocalIncremental(cfg, State{})
+	return movies, shows, episodes, err
+}
+
+func ScanLocalIncremental(cfg Config, previous State) ([]Movie, []Show, []Episode, ScanStats, error) {
 	var movies []Movie
 	var shows []Show
 	var episodes []Episode
+	stats := ScanStats{}
 	showTemp := map[string]int{}
 	nextTemp := 1
+	oldMovies := map[string]Movie{}
+	oldEpisodes := map[string]Episode{}
+	oldSources := map[string]bool{}
+	seenSources := map[string]bool{}
+	for _, item := range previous.Movies {
+		oldMovies[item.SourceURL] = item
+		oldSources[item.SourceURL] = true
+	}
+	for _, item := range previous.Episodes {
+		oldEpisodes[item.SourceURL] = item
+		oldSources[item.SourceURL] = true
+	}
+
 	err := filepath.Walk(cfg.MediaRoot, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return nil
@@ -50,41 +76,72 @@ func ScanLocal(cfg Config) ([]Movie, []Show, []Episode, error) {
 		if e != nil {
 			return nil
 		}
-		p, ok := ParseMedia(rel)
+		parsed, ok := ParseMedia(rel)
 		if !ok {
 			return nil
 		}
 		src := publicURL(cfg.MediaBaseURL, rel)
-		if p.Kind == "movie" {
-			movies = append(movies, Movie{SourceURL: src, Title: p.Title, Year: p.Year, MetadataStatus: "pending"})
+		seenSources[src] = true
+		stats.Files++
+		fileSize := info.Size()
+		fileMTime := info.ModTime().Unix()
+		profile := MediaProfile{}
+		reused := false
+		if parsed.Kind == "movie" {
+			if old, ok := oldMovies[src]; ok && old.FileSize == fileSize && old.FileMTime == fileMTime {
+				profile = old.MediaProfile
+				reused = true
+			}
+		} else if old, ok := oldEpisodes[src]; ok && old.FileSize == fileSize && old.FileMTime == fileMTime {
+			profile = old.MediaProfile
+			reused = true
+		}
+		if reused {
+			stats.Reused++
+		} else {
+			profile = profileLocalFile(path)
+			stats.Profiled++
+		}
+
+		if parsed.Kind == "movie" {
+			movies = append(movies, Movie{
+				SourceURL: src, Title: parsed.Title, Year: parsed.Year, MetadataStatus: "pending",
+				FileSize: fileSize, FileMTime: fileMTime, MediaProfile: profile,
+			})
 			return nil
 		}
 
-		key := strings.ToLower(p.ShowTitle)
+		key := strings.ToLower(parsed.ShowTitle)
 		tid, ok := showTemp[key]
 		if !ok {
 			tid = nextTemp
 			nextTemp++
 			showTemp[key] = tid
-			shows = append(shows, Show{ID: tid, Title: p.ShowTitle, MetadataStatus: "pending"})
+			shows = append(shows, Show{ID: tid, Title: parsed.ShowTitle, MetadataStatus: "pending"})
 		}
 
 		contentType := "episode"
 		metadataStatus := "pending"
-		if p.Kind == "extra" {
+		if parsed.Kind == "extra" {
 			contentType = "extra"
 			metadataStatus = "local"
 		}
 		episodes = append(episodes, Episode{
-			ShowID: tid, SourceURL: src, Season: p.Season, Episode: p.Episode,
-			Title: p.Title, ContentType: contentType, MetadataStatus: metadataStatus,
+			ShowID: tid, SourceURL: src, Season: parsed.Season, Episode: parsed.Episode,
+			Title: parsed.Title, ContentType: contentType, MetadataStatus: metadataStatus,
+			FileSize: fileSize, FileMTime: fileMTime, MediaProfile: profile,
 		})
 		return nil
 	})
 	if os.IsNotExist(err) {
-		return nil, nil, nil, fmt.Errorf("media root not found: %s", cfg.MediaRoot)
+		return nil, nil, nil, stats, fmt.Errorf("media root not found: %s", cfg.MediaRoot)
+	}
+	for source := range oldSources {
+		if !seenSources[source] {
+			stats.Removed++
+		}
 	}
 	sort.Slice(movies, func(i, j int) bool { return movies[i].Title < movies[j].Title })
 	sort.Slice(shows, func(i, j int) bool { return shows[i].Title < shows[j].Title })
-	return movies, shows, episodes, err
+	return movies, shows, episodes, stats, err
 }
