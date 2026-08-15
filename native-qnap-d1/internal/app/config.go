@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-const Version = "0.3.8"
+const Version = "0.3.18"
 
 type Config struct {
 	Listen            string
@@ -16,6 +16,7 @@ type Config struct {
 	DataDir           string
 	WebRoot           string
 	TMDBToken         string
+	ImageCacheDir     string
 	EnableDTSFallback bool
 }
 
@@ -41,13 +42,15 @@ func boolenv(k string, d bool) bool {
 func LoadConfig() Config {
 	exe, _ := os.Executable()
 	base := filepath.Dir(exe)
+	dataDir := getenv("HC_DATA_DIR", filepath.Join(base, "data"))
 	return Config{
 		Listen:            getenv("HC_LISTEN", ":8096"),
 		MediaRoot:         getenv("HC_MEDIA_ROOT", filepath.Join(base, "media")),
 		MediaBaseURL:      strings.TrimRight(getenv("HC_MEDIA_BASE_URL", "http://192.168.0.101:8096/media/"), "/") + "/",
-		DataDir:           getenv("HC_DATA_DIR", filepath.Join(base, "data")),
+		DataDir:           dataDir,
 		WebRoot:           getenv("HC_WEB_ROOT", filepath.Join(base, "www")),
 		TMDBToken:         strings.TrimSpace(os.Getenv("TMDB_BEARER_TOKEN")),
+		ImageCacheDir:     getenv("HC_IMAGE_CACHE_DIR", filepath.Join(dataDir, "image-cache")),
 		EnableDTSFallback: boolenv("HC_ENABLE_DTS_FALLBACK", false),
 	}
 }
