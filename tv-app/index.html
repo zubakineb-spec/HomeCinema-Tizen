@@ -7,6 +7,7 @@
   <script type="text/javascript" src="$WEBAPIS/webapis/webapis.js"></script>
   <link rel="stylesheet" href="css/app.css" />
   <link rel="stylesheet" href="css/rc-release.css" />
+  <link rel="stylesheet" href="css/rc3-fixes.css" />
 </head>
 <body tabindex="-1">
   <div id="app">
@@ -108,7 +109,7 @@
           </div>
           <div class="player-timeline-row">
             <div id="playerCurrentTime" class="player-time">00:00</div>
-            <div class="progress"><span id="playerProgress"></span></div>
+            <div id="playerTimelineButton" class="progress player-focusable" data-player-timeline="1" tabindex="0"><span id="playerProgress"></span></div>
             <div id="playerDurationTime" class="player-time">00:00</div>
           </div>
           <div id="playerControls" class="player-controls">
@@ -118,7 +119,7 @@
             <button id="playerAudioButton" class="player-control player-control-setting player-focusable" data-player-panel="audio"><span class="control-icon">♪</span><span class="control-copy"><b>Аудио</b><small id="playerAudioLabel">Авто</small></span></button>
             <button id="playerSubtitleButton" class="player-control player-control-setting player-focusable" data-player-panel="subtitles"><span class="control-icon">CC</span><span class="control-copy"><b>Субтитры</b><small id="playerSubtitleLabel">Выкл.</small></span></button>
           </div>
-          <div class="player-hint">OK — управление · ←/→ — перемотка · Назад — закрыть меню / выйти</div>
+          <div class="player-hint">OK — управление · шкала прогресса + ←/→ — перемотка · Назад — закрыть меню / выйти</div>
         </div>
       </div>
 
@@ -140,6 +141,7 @@
   <script src="js/image-map.js"></script>
   <script src="js/config.js"></script>
   <script src="js/rc-release.js"></script>
+  <script src="js/rc3-fixes.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>
