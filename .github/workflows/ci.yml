@@ -46,11 +46,15 @@ jobs:
           node --check tv-app/js/config.js
           node --check tv-app/js/browser-avplay-shim.js
           node --check tv-app/js/rc-release.js
+          node --check tv-app/js/rc3-selection-sync.js
+          node --check tv-app/js/rc32-player-navigation.js
+          node --check tv-app/js/rc3-fixes.js
           node --check tools/player-state-smoke.js
           node --check tools/progress-consistency-smoke.js
           node --check tools/player-lifecycle-smoke.js
           node --check tools/tizen4-compat-smoke.js
           node --check tools/release-candidate-smoke.js
+          node --check tools/player-focus-cleanup-smoke.js
           node --check tools/api-origin-smoke.js
 
       - name: TV player state smoke test
@@ -67,6 +71,9 @@ jobs:
 
       - name: TV release candidate UX and attribution gate
         run: node tools/release-candidate-smoke.js
+
+      - name: TV player focus cleanup gate
+        run: node tools/player-focus-cleanup-smoke.js
 
       - name: TV API origin routing gate
         run: node tools/api-origin-smoke.js
