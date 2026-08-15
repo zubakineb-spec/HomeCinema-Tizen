@@ -174,10 +174,18 @@ window.addEventListener('keydown',function(e){
     if(code===13){consume(e);commitScrub(true);return false}
     if(code===40){consume(e);if(scrubActive)commitScrub(true);focusControl();return false}
     if(code===38){consume(e);return false}
-    if(code===10009||code===27){if(scrubActive)cancelScrub();return}
+    if(code===10009||code===27){
+      /* Cancel an uncommitted target, but DO NOT consume Back.
+       * app.js must still see the same Back event so it can close the menu;
+       * the next Back then stops the movie normally. */
+      if(scrubActive)cancelScrub();
+      return;
+    }
     return;
   }
 
+  /* Outside the timeline, app.js remains the single source of truth for
+   * Left/Right/OK, Audio, Subtitles, Play/Pause and Back. */
   var active=closest(document.activeElement,'#playerControls .player-focusable');
   if(active&&code===38){
     lastControl=active;resetHold();consume(e);focusTimeline();return false;
