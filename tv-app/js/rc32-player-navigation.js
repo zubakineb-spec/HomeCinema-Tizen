@@ -41,7 +41,7 @@ function ensureScrubUi(){
 function focusTimeline(){
   var t=timeline();if(!t)return;
   clearPlayerFocus();t.classList.add('focused');try{t.focus()}catch(_){}
-  var hint=$('.player-hint');if(hint)hint.textContent='←/→ — выбрать позицию · пауза — переход · OK — перейти сейчас · ↓ — к кнопкам';
+  var hint=$('.player-hint');if(hint)hint.textContent='←/→ — выбрать позицию · отпустили — переход · OK — сразу · ↓ — к кнопкам';
 }
 function focusControl(){
   var c=lastControl;
