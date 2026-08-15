@@ -366,6 +366,11 @@ function runPostStart(token,url,p){
     showPlayerMenu('#playerToggleButton');
   });
 }
+function restorePausedTrackSwitch(p){
+  if(!state.player||!state.player.restorePausedAfterTrackSwitch)return;
+  try{if(p.getState()==='PLAYING')p.pause()}catch(e){console.warn('Restore paused track-switch state failed',e)}
+  state.player.restorePausedAfterTrackSwitch=false;
+}
 function handlePlayerVisibility(){
   if(!state.player||state.player.phase!=='playing'||!avAvailable())return;
   if(state.seekBusy){state.pendingVisibility=true;return}
@@ -383,6 +388,7 @@ function handlePlayerVisibility(){
   try{
     p.restore();
     state.lifecycleSuspended=false;
+    restorePausedTrackSwitch(p);
     var pending=state.postStartPending;
     if(pending&&state.player&&pending.token===state.player.token)runPostStart(pending.token,pending.url,p);
     else if(state.player)showPlayerMenu('#playerToggleButton');
@@ -436,7 +442,7 @@ function startPlayback(url,title){
   state.playerToken++;
   var token=state.playerToken;
   state.mode='player';state.tracksOpen=false;
-  state.player={token:token,url:url,title:title||'Видео',phase:'boot',subtitleOff:true,lastPosition:0,lastDuration:0};
+  state.player={token:token,url:url,title:title||'Видео',phase:'boot',subtitleOff:true,lastPosition:0,lastDuration:0,restorePausedAfterTrackSwitch:false};
   $('#playerTitle').textContent=title||'Видео';$('#playerProgress').style.width='0%';
   $('#playerCurrentTime').textContent='00:00';$('#playerDurationTime').textContent='00:00';
   $('#playerBootText').textContent='Запуск видео…';
@@ -637,15 +643,22 @@ function closePlayerPanel(){
 }
 function selectPlayerTrack(type,index,button){
   if(!state.player||state.player.phase!=='playing'||state.seekBusy||state.lifecycleSuspended||!avAvailable())return;
+  var token=state.player.token,p=webapis.avplay,wasPaused=false;
   try{
-    var token=state.player.token,p=webapis.avplay,wasPaused=false;try{wasPaused=p.getState()==='PAUSED'}catch(_){}
-    if(type==='AUDIO'&&wasPaused){p.play()}
+    try{wasPaused=p.getState()==='PAUSED'}catch(_){}
+    if(type==='AUDIO'&&wasPaused){state.player.restorePausedAfterTrackSwitch=true;p.play()}
     if(type==='TEXT'){p.setSilentSubtitle(false);state.player.subtitleOff=false}
     p.setSelectTrack(type,Number(index));
-    if(type==='AUDIO'&&wasPaused){setTimeout(function(){if(!state.player||state.player.token!==token||state.lifecycleSuspended)return;try{if(p.getState()==='PLAYING')p.pause();syncToggleButton()}catch(_){}},120)}
+    if(type==='AUDIO'&&wasPaused){setTimeout(function(){
+      if(!state.player||state.player.token!==token||state.lifecycleSuspended)return;
+      restorePausedTrackSwitch(p);syncToggleButton();
+    },120)}
     if(button){var d=button.querySelector('.setting-main');toast((type==='AUDIO'?'Аудио: ':'Субтитры: ')+(d?d.textContent:button.textContent),1800)}
     setTimeout(function(){if(!state.player||state.player.token!==token||state.lifecycleSuspended)return;refreshPlayerTrackSummary();openPlayerPanel(type==='AUDIO'?'audio':'subtitles')},180);
-  }catch(e){console.warn('Track switch failed',e);toast('Не удалось переключить дорожку',3000)}
+  }catch(e){
+    if(type==='AUDIO'&&wasPaused&&state.player&&state.player.token===token&&!state.lifecycleSuspended)restorePausedTrackSwitch(p);
+    console.warn('Track switch failed',e);toast('Не удалось переключить дорожку',3000)
+  }
 }
 function disableSubtitles(){
   if(!state.player||state.seekBusy||state.lifecycleSuspended)return;
