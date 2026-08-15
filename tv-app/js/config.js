@@ -1,17 +1,45 @@
 // Home Cinema Samsung TV target configuration.
-// AVPlay lifecycle is owned by app.js; no monkey-patching on Tizen 4.0.
+// AVPlay lifecycle is owned by app.js; this file only owns API endpoint routing.
 (function(){
-  var backend='http://192.168.0.101:8096';
+  'use strict';
+
+  var DEFAULT_BACKEND='http://192.168.0.101:8096';
+  var STORAGE_KEY='homecinema.api.base';
+
+  function normalize(value){
+    value=String(value||'').replace(/^\s+|\s+$/g,'').replace(/\/+$/,'');
+    if(!/^https?:\/\//i.test(value))return '';
+    return value;
+  }
+  function savedBackend(){
+    try{return normalize(window.localStorage.getItem(STORAGE_KEY))}catch(_){return ''}
+  }
+
+  var backend=savedBackend()||DEFAULT_BACKEND;
   window.HOME_CINEMA_API=backend;
+  window.HOME_CINEMA_DEFAULT_API=DEFAULT_BACKEND;
+  window.HOME_CINEMA_NATIVE_FETCH=window.fetch;
+  window.HOME_CINEMA_SET_API=function(value){
+    var next=normalize(value);
+    if(!next)return false;
+    try{window.localStorage.setItem(STORAGE_KEY,next)}catch(_){}
+    window.HOME_CINEMA_API=next;
+    return true;
+  };
+  window.HOME_CINEMA_RESET_API=function(){
+    try{window.localStorage.removeItem(STORAGE_KEY)}catch(_){}
+    window.HOME_CINEMA_API=DEFAULT_BACKEND;
+    return DEFAULT_BACKEND;
+  };
 
   // Tizen Studio can launch an imported WGT with an http(s) origin. In that mode
   // app.js intentionally uses root-relative API URLs. Redirect only those API
-  // calls to the configured QNAP backend; absolute media/image URLs are untouched.
+  // calls to the configured QNAP backend; absolute media URLs remain untouched.
   var nativeFetch=window.fetch;
   if(typeof nativeFetch==='function'){
     window.fetch=function(input,opts){
       if(typeof input==='string'&&input.indexOf('/api/')===0){
-        input=backend+input;
+        input=window.HOME_CINEMA_API+input;
       }
       return nativeFetch.call(window,input,opts);
     };
