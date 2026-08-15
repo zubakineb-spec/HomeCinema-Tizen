@@ -3,19 +3,24 @@
 (function(){
   'use strict';
 
-  if(typeof window.Response!=='function'){
-    function MiniResponse(body,init){
-      init=init||{};
-      this._body=String(body==null?'':body);
-      this.status=Number(init.status||200);
-      this.ok=this.status>=200&&this.status<300;
-      this.statusText=this.ok?'OK':'ERROR';
-      this.headers=init.headers||{};
-    }
-    MiniResponse.prototype.text=function(){return Promise.resolve(this._body)};
-    MiniResponse.prototype.json=function(){var body=this._body;return Promise.resolve().then(function(){return JSON.parse(body)})};
-    MiniResponse.prototype.clone=function(){return new MiniResponse(this._body,{status:this.status,headers:this.headers})};
-    window.Response=MiniResponse;
+  // RC3.7 enhancement code needs to synthesize small JSON responses when the NAS
+  // is temporarily offline. Capture a deterministic constructor now, then restore
+  // the browser-native Response after synchronous scripts have loaded.
+  var nativeResponse=window.Response;
+  function MiniResponse(body,init){
+    init=init||{};
+    this._body=String(body==null?'':body);
+    this.status=Number(init.status||200);
+    this.ok=this.status>=200&&this.status<300;
+    this.statusText=this.ok?'OK':'ERROR';
+    this.headers=init.headers||{};
+  }
+  MiniResponse.prototype.text=function(){return Promise.resolve(this._body)};
+  MiniResponse.prototype.json=function(){var body=this._body;return Promise.resolve().then(function(){return JSON.parse(body)})};
+  MiniResponse.prototype.clone=function(){return new MiniResponse(this._body,{status:this.status,headers:this.headers})};
+  window.Response=MiniResponse;
+  if(typeof nativeResponse==='function'){
+    window.setTimeout(function(){window.Response=nativeResponse},0);
   }
 
   var DEFAULT_BACKEND='http://192.168.0.101:8096';
