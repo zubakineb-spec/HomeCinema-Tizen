@@ -435,8 +435,10 @@ function restoreProgress(url,p,token,onDone){
   }).catch(function(e){finish(e)});
 }
 function saveProgress(pos,dur,completed,player){
-  var pl=player||state.player;if(!pl)return;
-  fetch(API_BASE+'/api/progress',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({source_url:pl.url,position_ms:Math.round(pos||0),duration_ms:Math.round(dur||0),completed:!!completed})}).catch(function(){});
+  var pl=player||state.player;if(!pl)return Promise.resolve(false);
+  return fetch(API_BASE+'/api/progress',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({source_url:pl.url,position_ms:Math.round(pos||0),duration_ms:Math.round(dur||0),completed:!!completed})})
+    .then(function(r){return !!(r&&r.ok)})
+    .catch(function(){return false});
 }
 function formatPlayerTime(ms){
   var sec=Math.max(0,Math.floor(Number(ms||0)/1000)),h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60),s=sec%60;
@@ -465,9 +467,12 @@ function stopPlayer(completed){
   if(state.seekBusy){state.pendingStop={completed:!!completed};return}
   var pl=state.player,pos=0,dur=0;clearPlayerTimer();clearSaveTimer();state.pendingStop=null;
   try{var p=webapis.avplay;pos=p.getCurrentTime();dur=p.getDuration()}catch(_){}
-  closeAv();saveProgress(pos,dur,completed,pl);restorePlayerScreen();
+  if(pos<=0&&Number(pl.lastPosition||0)>0)pos=Number(pl.lastPosition);
+  if(dur<=0&&Number(pl.lastDuration||0)>0)dur=Number(pl.lastDuration);
+  var completedNow=!!completed||(dur>0&&pos/dur>0.95);
+  closeAv();restorePlayerScreen();
   state.player=null;state.tracksOpen=false;state.playerMenuOpen=false;state.playerPanel=null;state.mode=state.current?'details':'home';
-  loadContinue().then(function(){rebuildFocus($('#detailPlay')||null)});
+  saveProgress(pos,dur,completedNow,pl).then(function(){return loadContinue()}).then(function(){rebuildFocus($('#detailPlay')||null)});
 }
 function syncToggleButton(){
   if(!state.player||!avAvailable())return;
