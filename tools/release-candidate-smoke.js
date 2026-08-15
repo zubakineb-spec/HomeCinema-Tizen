@@ -28,6 +28,10 @@ assert(html.includes('css/rc-release.css'), 'release styles must be loaded');
 assert(html.includes('css/rc3-fixes.css'), 'RC3 layout styles must be loaded');
 assert(html.includes('id="playerTimelineButton"'), 'player timeline must be remote-focusable');
 assert(html.includes('data-player-timeline="1"'), 'player timeline must expose the seek focus contract');
+assert(html.includes('class="progress player-timeline-focusable"'), 'timeline must stay outside app.js native player-focusable list');
+assert(!html.includes('id="playerTimelineButton" class="progress player-focusable"'), 'timeline must not corrupt Audio/Subtitle control indexes');
+assert(html.includes('id="playerAudioButton"'), 'Audio control must remain present');
+assert(html.includes('id="playerSubtitleButton"'), 'Subtitle control must remain present');
 
 assert(rc.includes('code!==415&&code!==19'), 'dedicated MediaPlay and MediaPause keys must be handled');
 assert(rc.includes("code===415&&state==='PAUSED'"), 'MediaPlay must resume only from PAUSED');
@@ -41,8 +45,11 @@ assert(app.includes("return ['detail-actions','seasons','episodes','extras'];"),
 assert(app.includes("return ['search-input','search-results'];"), 'search input/results must stay in remote focus order');
 assert(app.includes("if(code===37||code===412)"), 'left/MediaRewind must seek backward');
 assert(app.includes("if(code===39||code===417)"), 'right/MediaFastForward must seek forward');
+assert(app.includes("if(code===413){consume(e);stopPlayer(false);return false}"), 'MediaStop must always stop playback');
+assert(app.includes("if(state.playerMenuOpen){hidePlayerMenu();return false}"), 'Back must close player menu before leaving playback');
+assert(app.includes('openPlayerPanel(playerPanel.dataset.playerPanel)'), 'Audio and subtitle buttons must route through native app.js panels');
 assert(css.includes('.about-overlay'), 'About overlay styles must exist');
-assert(css.includes('.tmdb-logo'), 'TMDB logo must have explicit TV-safe sizing');
+assert(css.includes('.tmdb-logo'), 'About must have explicit TV-safe TMDB logo sizing');
 
 assert(selectionSync.includes('heroSelection'), 'hero sync must keep an explicit selected type/id state');
 assert(selectionSync.includes('selectionFromCard'), 'hero sync must derive selection from the focused media card');
@@ -56,13 +63,20 @@ assert(rc32nav.includes('focusTimeline'), 'timeline navigation must have an expl
 assert(rc32nav.includes('code===40'), 'Down from timeline must return to player controls');
 assert(rc32nav.includes('focusControl'), 'timeline navigation must restore the previous player control');
 assert(rc32nav.includes('scrubTarget'), 'timeline must keep a visual target separate from current playback position');
-assert(rc32nav.includes('SCRUB_COMMIT_DELAY'), 'timeline scrubbing must debounce repeated remote presses');
+assert(rc32nav.includes('scrubWasPlaying'), 'scrub must remember whether playback was running');
+assert(rc32nav.includes("window.addEventListener('keyup'"), 'scrub must commit on physical key release');
+assert(!rc32nav.includes('SCRUB_COMMIT_DELAY'), 'scrub must never auto-commit on an idle timeout while a key is held');
+assert(!rc32nav.includes('scheduleCommit'), 'scrub must not use timer-based seek commits');
+assert(rc32nav.includes('Number(delay)===7000'), 'timeline must suppress the native menu auto-hide while scrubbing');
 assert(rc32nav.includes('playerSeekPreview'), 'timeline scrubbing must show the target time clearly');
 assert(rc32nav.includes('playerScrubFill'), 'timeline scrubbing must show a visual target fill');
 assert(rc32nav.includes('seekTo(target'), 'timeline must commit one absolute seek after scrubbing');
 assert(!rc32nav.includes('jumpForward('), 'timeline must not issue a jump for every Right key press');
 assert(!rc32nav.includes('jumpBackward('), 'timeline must not issue a jump for every Left key press');
-assert(rc32nav.includes('stopImmediatePropagation'), 'timeline navigation must preempt conflicting app.js key handling');
+assert(rc32nav.includes('if(scrubActive)cancelScrub();'), 'Back must cancel an uncommitted scrub target');
+assert(rc32nav.includes('DO NOT consume Back'), 'scrub layer must leave Back available to app.js');
+assert(rc32nav.includes('Outside the timeline, app.js remains the single source of truth'), 'Audio/Subtitle/control navigation must stay owned by app.js');
+assert(rc32nav.includes('stopImmediatePropagation'), 'timeline navigation must preempt conflicting app.js key handling only on the timeline');
 
 assert(rc3.includes('homecinema.playerPrefs.v1'), 'RC3 must persist player preferences');
 assert(rc3.includes('setSilentSubtitle'), 'RC3 must restore subtitle preference through AVPlay');
@@ -75,16 +89,19 @@ assert(rc3css.includes('.hero{height:500px}'), 'RC3 hero must be reduced to keep
 assert(rc3css.includes('.episode-overview'), 'episode description styles must exist');
 assert(rc3css.includes('font-size:22px'), 'episode descriptions must be large enough for TV viewing distance');
 assert(rc3css.includes('-webkit-line-clamp:3'), 'episode descriptions must allow three readable lines');
+assert(rc3css.includes('.progress.player-timeline-focusable'), 'dedicated timeline focus styling must exist');
 assert(rc3css.includes('.player-seek-preview'), 'scrub target time must have a visible preview bubble');
 assert(rc3css.includes('.player-scrub-fill'), 'scrub target must have a visible progress fill');
 
-console.log('PASS: Smart Remote dedicated Play/Pause keys');
+console.log('PASS: Smart Remote dedicated Play/Pause/Stop keys');
 console.log('PASS: details/search/series focus contracts');
 console.log('PASS: About/Credits remote flow');
 console.log('PASS: TMDB attribution notice and official logo URL');
 console.log('PASS: RC3 hero selection is bound to exact media type/id');
 console.log('PASS: RC3 featured hero and compact home layout');
-console.log('PASS: RC3.3 debounced visual timeline scrub with one seekTo commit');
+console.log('PASS: RC3.4 hold-to-scrub commits only on key release/OK/Down');
+console.log('PASS: RC3.4 Back remains owned by app.js and stops playback normally');
+console.log('PASS: RC3.4 Audio/Subtitle controls remain in native player focus list');
 console.log('PASS: RC3.3 episode descriptions are larger and three lines');
 console.log('PASS: RC3 player preference persistence');
 console.log('HOME_CINEMA_RELEASE_CANDIDATE_SMOKE=PASS');
