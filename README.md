@@ -1,10 +1,12 @@
 # Home Cinema for Samsung Tizen
 
-Локальный домашний кинотеатр для Samsung Smart TV. Целевая домашняя схема пользователя: Samsung UE49NU7500U и NAS `192.168.0.101`.
+Локальный домашний кинотеатр для Samsung Smart TV. Целевая домашняя схема: Samsung UE49NU7500U и NAS `192.168.0.101`.
 
 ## Текущая версия
 
-`0.3.2`
+`0.3.18` — RC-ready функциональный baseline.
+
+Код TV-клиента, QNAP D1 runtime и постоянные TV regression gates находятся в `main`. Установка WGT на целевой Samsung 2018 / Tizen 4.0 остаётся отдельным внешним blocker и отслеживается в issue #10 и `docs/TIZEN4-DEPLOYMENT-BLOCKER.md`.
 
 ## Целевая схема QNAP D1
 
@@ -31,23 +33,25 @@ Backend сам публикует видео как `http://192.168.0.101:8096/m
 - распознавание `S01E02`, `1x02`, `Season 01`, `Сезон 01`, `S01` и числовых файлов серий;
 - TMDb: русские названия/описания, постеры, backdrop, рейтинг, жанры и данные эпизодов;
 - поиск;
-- «Продолжить просмотр»;
-- сезоны и серии;
-- Samsung Smart Remote: D-pad, OK, Back, Play/Pause, перемотка;
-- Samsung AVPlay + HTML5 fallback;
+- «Продолжить просмотр» с устойчивым сохранением позиции;
+- сезоны, серии и дополнительные материалы;
+- Okko-style TV UI и отдельная focus model для Samsung Smart Remote;
+- Samsung Smart Remote: D-pad, OK, Back, MediaPlayPause, отдельные MediaPlay/MediaPause, Stop, Rewind/FastForward;
+- Samsung AVPlay lifecycle с сериализацией seek/restore seek и `suspend()/restore()`;
+- сохранение PAUSED через background/restore и смену аудиодорожки;
 - выбор аудиодорожек и встроенных субтитров через AVPlay;
-- сохранение позиции просмотра;
+- автоматический выбор совместимой не-DTS аудиодорожки;
 - Direct Play с NAS;
-- профиль совместимости Samsung UE49NU7500U / Tizen 4.0;
-- обнаружение DTS/совместимой аудиодорожки;
-- опциональный DTS-only HLS fallback через FFmpeg.
+- browser AVPlay shim для desktop/CI проверок без подмены native AVPlay на Samsung TV;
+- профиль совместимости Samsung UE49NU7500U / Tizen 4.0 / Chromium M56;
+- экран «О приложении / Credits» с TMDB attribution.
 
 ## Хранение данных на D1
 
 D1-runtime использует два небольших JSON-файла вместо SQLite:
 
 - `catalog.json` — фильмы, сериалы, эпизоды и TMDb metadata;
-- `progress.json` — только позиции просмотра.
+- `progress.json` — позиции просмотра.
 
 Разделение снижает количество записей большого каталога при частом сохранении позиции воспроизведения.
 
@@ -113,7 +117,7 @@ export TMDB_BEARER_TOKEN="ВАШ_TOKEN"
 
 ## DTS и QNAP D1
 
-Samsung UE49NU7500U не должен получать DTS-only поток как единственный звук. Если MKV содержит альтернативную совместимую дорожку, TV-клиент пытается выбрать её через AVPlay без транскодирования.
+Samsung UE49NU7500U не должен получать DTS-only поток как единственный звук. Если MKV содержит альтернативную совместимую дорожку, TV-клиент выбирает её через AVPlay без транскодирования.
 
 На D1 `HC_ENABLE_DTS_FALLBACK=false` по умолчанию. Если на NAS доступны `ffprobe` и `ffmpeg`, fallback можно включить после аппаратного теста. В этом режиме видео копируется без перекодирования, а только звук преобразуется в AAC. Для двухъядерного ARM это опциональный режим, а не основной сценарий.
 
@@ -125,7 +129,7 @@ Samsung UE49NU7500U не должен получать DTS-only поток ка�
 http://192.168.0.101:8096
 ```
 
-Для установки `.wgt` на телевизор нужны Samsung TV SDK/Tizen Studio, Developer Mode телевизора и Samsung certificate profile. Скрипты:
+Для установки `.wgt` на телевизор нужны Samsung TV SDK/Tizen Studio, Developer Mode телевизора и Samsung certificate profile. Базовые скрипты:
 
 ```powershell
 .\BUILD-SAMSUNG-WGT.ps1 -CertificateProfile "ИмяПрофиля"
@@ -134,22 +138,44 @@ http://192.168.0.101:8096
 
 Подробно: `docs/SAMSUNG-INSTALL.md`.
 
+### Samsung 2018 / Tizen 4 deployment blocker
+
+На UE49NU7500 WGT в текущем окружении передаётся на TV, но установка обрывается до `installing[n]`. Уже исключены приложение/manifest/размер пакета, current и legacy packager, старый и свежий Samsung certificate profile, неправильный DUID, SDB connectivity и отсутствие `Install Permitted`.
+
+Следующий контролируемый эксперимент — импорт уже подписанного `.wgt` обратно в Tizen Studio как нового Tizen Web project с целью Tizen 4.0 и установка импортированного проекта на тот же TV.
+
+Полная матрица: `docs/TIZEN4-DEPLOYMENT-BLOCKER.md`. Tracking: issue #10.
+
 ## Более мощные NAS
 
-Python/FastAPI backend, SQLite, Dockerfile и `docker-compose.nas.yml`, разработанные в `0.3.1`, сохраняются для современных x86-64/ARM64 NAS с контейнерной средой. **Для QNAP D1 целевым является native ARMv7 runtime `0.3.2`, а не Docker.**
+Python/FastAPI backend, SQLite, Dockerfile и `docker-compose.nas.yml` сохраняются для современных x86-64/ARM64 NAS с контейнерной средой. Для QNAP D1 целевым остаётся native ARMv7 runtime.
 
 ## CI и versioning
 
 SemVer. Репозиторий: `zubakineb-spec/HomeCinema-Tizen`.
 
-GitHub Actions проверяет Python regression suite, JavaScript Tizen-клиента, Go-тесты D1-runtime и делает cross-build:
+GitHub Actions проверяет:
+
+- Python backend regression suite и compile check;
+- JavaScript syntax;
+- player state smoke;
+- progress consistency smoke;
+- AVPlay lifecycle smoke;
+- Tizen 4 / Chromium M56 compatibility gate;
+- release-candidate Smart Remote UX / attribution gate;
+- Go tests D1-runtime;
+- ARMv7 cross-build и install artifact.
+
+Cross-build:
 
 ```text
 GOOS=linux GOARCH=arm GOARM=7 CGO_ENABLED=0
 ```
 
-CI формирует artifact `HomeCinema-D1-armv7-v0.3.2`.
+CI формирует artifact `HomeCinema-D1-armv7-v0.3.18`.
 
 ## Атрибуция TMDb
 
-TV-клиент содержит экран «О приложении» с уведомлением TMDb. Перед публичным распространением необходимо использовать утверждённый TMDb logo asset в соответствии с их правилами атрибуции.
+TV-клиент содержит экран «О приложении / Credits» с TMDB logo asset и уведомлением:
+
+`This product uses the TMDB API but is not endorsed or certified by TMDB.`
