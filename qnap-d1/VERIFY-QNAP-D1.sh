@@ -17,3 +17,12 @@ printf 'Binary: '; ./homecinema-d1 --version 2>&1
 printf 'QPKG Enable: '; /sbin/getcfg HomeCinemaD1 Enable -f /etc/config/qpkg.conf 2>/dev/null || echo not-registered
 printf 'QPKG RC_Number: '; /sbin/getcfg HomeCinemaD1 RC_Number -f /etc/config/qpkg.conf 2>/dev/null || echo not-registered
 printf 'QPKG Shell: '; /sbin/getcfg HomeCinemaD1 Shell -f /etc/config/qpkg.conf 2>/dev/null || echo not-registered
+APPDIR="$(/sbin/getcfg HomeCinemaD1 Install_Path -f /etc/config/qpkg.conf 2>/dev/null || true)"
+printf 'Watchdog script: '
+if [ -n "$APPDIR" ] && [ -x "$APPDIR/homecinema-watchdog.sh" ]; then
+  echo "$APPDIR/homecinema-watchdog.sh"
+else
+  echo not-installed
+fi
+printf 'Watchdog cron: '
+grep 'homecinema-watchdog.sh' /etc/config/crontab 2>/dev/null | tail -1 || echo not-installed
