@@ -41,7 +41,11 @@ jobs:
           package-manager-cache: false
 
       - name: TV JavaScript syntax check
-        run: node --check tv-app/js/app.js && node --check tv-app/js/config.js && node --check tv-app/js/browser-avplay-shim.js
+        run: |
+          node --check tv-app/js/app.js
+          node --check tv-app/js/config.js
+          node --check tv-app/js/browser-avplay-shim.js
+          node --check tools/patch-v0.3.18-tizen4-hardening-v4.js
 
       - name: Set up Go
         uses: actions/setup-go@v7
