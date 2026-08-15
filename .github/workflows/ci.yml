@@ -47,6 +47,10 @@ jobs:
           node --check tv-app/js/browser-avplay-shim.js
           node --check tools/patch-v0.3.18-tizen4-hardening-v5.js
           node --check tools/fix-v0.3.18-async-restore-seek.js
+          node --check tools/player-state-smoke.js
+
+      - name: TV player state smoke test
+        run: node tools/player-state-smoke.js
 
       - name: Set up Go
         uses: actions/setup-go@v7
