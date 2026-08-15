@@ -45,10 +45,12 @@ jobs:
           node --check tv-app/js/app.js
           node --check tv-app/js/config.js
           node --check tv-app/js/browser-avplay-shim.js
+          node --check tv-app/js/rc-release.js
           node --check tools/player-state-smoke.js
           node --check tools/progress-consistency-smoke.js
           node --check tools/player-lifecycle-smoke.js
           node --check tools/tizen4-compat-smoke.js
+          node --check tools/release-candidate-smoke.js
 
       - name: TV player state smoke test
         run: node tools/player-state-smoke.js
@@ -61,6 +63,9 @@ jobs:
 
       - name: Tizen 4 Chromium 56 compatibility gate
         run: node tools/tizen4-compat-smoke.js
+
+      - name: TV release candidate UX and attribution gate
+        run: node tools/release-candidate-smoke.js
 
       - name: Set up Go
         uses: actions/setup-go@v7
