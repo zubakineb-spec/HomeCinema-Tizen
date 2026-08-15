@@ -17,8 +17,8 @@ function closest(el,selector){while(el&&el!==document){if(el.matches&&el.matches
 function visible(el){return !!el&&!closest(el,'.hidden')}
 function consume(e){try{e.preventDefault()}catch(_){}try{e.stopPropagation()}catch(_){}try{e.stopImmediatePropagation()}catch(_){}return false}
 function timeline(){return $('#playerTimelineButton')}
-function playerChromeVisible(){var c=$('#playerChrome');return !!c&&visible(c)}
 function playerActive(){var p=$('#player');return !!p&&!p.classList.contains('hidden')}
+function playerChromeVisible(){var c=$('#playerChrome');return playerActive()&&!!c&&!c.classList.contains('hidden')}
 function settingsOpen(){var s=$('#playerSettings');return !!s&&!s.classList.contains('hidden')}
 function clearPlayerFocus(){$$('.player-focusable,#playerTimelineButton').forEach(function(x){x.classList.remove('focused')})}
 function clamp(v,min,max){return Math.max(min,Math.min(max,v))}
@@ -42,7 +42,7 @@ function ensureScrubUi(){
 }
 function setHint(text){var hint=$('.player-hint');if(hint)hint.textContent=text}
 function focusTimeline(){
-  var t=timeline();if(!t)return;
+  var t=timeline();if(!t||!playerChromeVisible()||settingsOpen())return;
   clearPlayerFocus();t.classList.add('focused');try{t.focus()}catch(_){}
   setHint('←/→ — выбрать позицию · отпустить — перейти · OK — сразу · ↓ — к кнопкам · Назад — отменить');
 }
@@ -52,12 +52,22 @@ function focusControl(){
   if(!c)return;
   clearPlayerFocus();c.classList.add('focused');try{c.focus()}catch(_){}
 }
-function timelineFocused(){var t=timeline();return !!t&&(document.activeElement===t||t.classList.contains('focused'))}
+function timelineFocused(){
+  var t=timeline();
+  return playerChromeVisible()&&!settingsOpen()&&!!t&&(document.activeElement===t||t.classList.contains('focused'));
+}
 function hideScrubUi(delay){
   nativeSetTimeout(function(){
     var ui=ensureScrubUi();if(!ui||scrubActive)return;
     ui.timeline.classList.remove('scrubbing');ui.fill.style.width='0%';ui.preview.style.display='none';
   },delay||0);
+}
+function clearTimelineState(){
+  var t=timeline(),ui=ensureScrubUi();
+  scrubActive=false;scrubWasPlaying=false;seekInFlight=false;
+  scrubTarget=0;scrubDuration=0;scrubOrigin=0;lastControl=null;
+  if(ui){ui.timeline.classList.remove('scrubbing');ui.fill.style.width='0%';ui.preview.style.display='none'}
+  if(t){t.classList.remove('focused');if(document.activeElement===t){try{t.blur()}catch(_){}}}
 }
 function renderScrub(){
   var ui=ensureScrubUi();if(!ui||!scrubDuration)return;
@@ -112,7 +122,8 @@ function cancelScrub(){
   if(!scrubActive)return;
   var p=av(),resume=scrubWasPlaying;
   scrubActive=false;scrubWasPlaying=false;hideScrubUi(0);
-  if(resume&&p&&playerActive()){try{if(p.getState()==='PAUSED')p.play()}catch(_){}}
+  if(resume&&p&&playerActive()){try{if(p.getState()==='PAUSED')p.play()}catch(_){}
+  }
   var state=$('#playerStateText');if(state&&playerActive())state.textContent=resume?'Воспроизведение':'Пауза';
 }
 
@@ -156,6 +167,7 @@ window.addEventListener('keydown',function(e){
        * app.js must still see the same Back event so it can close the menu;
        * the next Back then stops the movie normally. */
       if(scrubActive)cancelScrub();
+      var t=timeline();if(t){t.classList.remove('focused');if(document.activeElement===t){try{t.blur()}catch(_){}}}
       return;
     }
     return;
@@ -180,6 +192,25 @@ window.addEventListener('keyup',function(e){
   commitScrub(false);
   return false;
 },true);
+
+/*
+ * Critical RC3.4 cleanup: the timeline is intentionally outside app.js's
+ * native player-focusable list. Therefore app.js cannot clear its DOM focus
+ * when playback closes. Without this cleanup the hidden timeline can keep
+ * intercepting Left/Right on Home after a movie is stopped.
+ */
+if(typeof MutationObserver!=='undefined'){
+  var player=$('#player'),chrome=$('#playerChrome');
+  var cleanupObserver=new MutationObserver(function(){
+    if(!playerActive()||!playerChromeVisible())clearTimelineState();
+  });
+  if(player)cleanupObserver.observe(player,{attributes:true,attributeFilter:['class']});
+  if(chrome)cleanupObserver.observe(chrome,{attributes:true,attributeFilter:['class']});
+}
+
+document.addEventListener('visibilitychange',function(){
+  if(document.hidden||!playerActive())clearTimelineState();
+});
 
 ensureScrubUi();
 })();
