@@ -16,6 +16,7 @@
         <button class="nav-item focusable" data-view="movies">Фильмы</button>
         <button class="nav-item focusable" data-view="shows">Сериалы</button>
         <button class="nav-item focusable" data-view="search">Поиск</button>
+        <button class="nav-item focusable" data-view="about">О приложении</button>
       </nav>
       <div id="clock"></div>
     </header>
@@ -65,6 +66,23 @@
         <div class="eyebrow">ПОИСК</div>
         <input id="searchInput" class="focusable search-input" data-nav-row="search-input" type="search" autocomplete="off" placeholder="Название фильма или сериала" />
         <div id="searchResults" class="search-results nav-row" data-nav-row="search-results"></div>
+      </div>
+    </div>
+
+    <div id="aboutOverlay" class="overlay about-overlay hidden">
+      <div class="about-card">
+        <div class="eyebrow">HOME CINEMA</div>
+        <h1>О приложении</h1>
+        <p>Локальный домашний кинотеатр для Samsung Tizen. Видео воспроизводится из вашей домашней сети.</p>
+        <div class="credits-block">
+          <img class="tmdb-logo" src="https://www.themoviedb.org/assets/2/v4/logos/v2/blue_square_2-d537fb228cf3ded904ef09b136fe3fec72548ebc1fea3fbbd1ad9e36364db38b.svg" alt="TMDB" />
+          <div class="credits-copy">
+            <div class="credits-source">Метаданные и изображения: <strong>TMDB</strong></div>
+            <p class="credits-notice">This product uses the TMDB API but is not endorsed or certified by TMDB.</p>
+            <p class="credits-note">TMDB используется как источник метаданных и изображений. Home Cinema не является продуктом TMDB.</p>
+          </div>
+        </div>
+        <button id="aboutBack" class="primary about-back">Назад</button>
       </div>
     </div>
 
@@ -120,6 +138,7 @@
   <script src="js/browser-avplay-shim.js"></script>
   <script src="js/image-map.js"></script>
   <script src="js/config.js"></script>
+  <script src="js/rc-release.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>
