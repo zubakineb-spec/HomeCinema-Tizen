@@ -22,6 +22,9 @@ var state={
   saveTimer:null,
   seekBusy:false,
   pendingStop:null,
+  lifecycleSuspended:false,
+  pendingVisibility:false,
+  postStartPending:null,
   searchTimer:null
 };
 var $=function(s,root){return (root||document).querySelector(s)};
@@ -317,6 +320,7 @@ function runSearch(){
 function avAvailable(){return typeof webapis!=='undefined'&&webapis.avplay}
 function clearPlayerTimer(){if(state.playerTimer){clearTimeout(state.playerTimer);state.playerTimer=null}}
 function clearSaveTimer(){if(state.saveTimer){clearTimeout(state.saveTimer);state.saveTimer=null}}
+function resetLifecycleState(){state.lifecycleSuspended=false;state.pendingVisibility=false;state.postStartPending=null}
 function createAvObject(){
   var host=$('#avHost');if(!host)return;
   host.innerHTML='';
@@ -346,10 +350,43 @@ function restorePlayerScreen(){
 }
 function failPlayback(message,token){
   if(token&&(!state.player||token!==state.player.token))return;
-  clearPlayerTimer();clearSaveTimer();state.seekBusy=false;state.pendingStop=null;closeAv();restorePlayerScreen();
+  clearPlayerTimer();clearSaveTimer();state.seekBusy=false;state.pendingStop=null;resetLifecycleState();closeAv();restorePlayerScreen();
   state.tracksOpen=false;state.player=null;state.mode=state.current?'details':'home';
   toast(message||'Видео не запустилось',5000);
   setTimeout(function(){rebuildFocus($('#detailPlay')||null)},40);
+}
+function runPostStart(token,url,p){
+  if(!state.player||state.player.token!==token)return;
+  if(document.hidden||state.lifecycleSuspended){state.postStartPending={token:token,url:url};return}
+  state.postStartPending=null;
+  selectCompatibleAudio();
+  restoreProgress(url,p,token,function(){
+    if(!state.player||state.player.token!==token||state.lifecycleSuspended)return;
+    refreshPlayerTrackSummary();
+    showPlayerMenu('#playerToggleButton');
+  });
+}
+function handlePlayerVisibility(){
+  if(!state.player||state.player.phase!=='playing'||!avAvailable())return;
+  if(state.seekBusy){state.pendingVisibility=true;return}
+  state.pendingVisibility=false;
+  var p=webapis.avplay;
+  if(document.hidden){
+    if(state.lifecycleSuspended)return;
+    try{
+      var s=p.getState();
+      if(s==='READY'||s==='PLAYING'||s==='PAUSED'){p.suspend();state.lifecycleSuspended=true;hidePlayerMenu()}
+    }catch(e){console.warn('AVPlay suspend failed',e)}
+    return;
+  }
+  if(!state.lifecycleSuspended)return;
+  try{
+    p.restore();
+    state.lifecycleSuspended=false;
+    var pending=state.postStartPending;
+    if(pending&&state.player&&pending.token===state.player.token)runPostStart(pending.token,pending.url,p);
+    else if(state.player)showPlayerMenu('#playerToggleButton');
+  }catch(e){console.warn('AVPlay restore failed',e)}
 }
 function beginPlayback(token,url){
   if(!state.player||state.player.token!==token)return;
@@ -371,7 +408,7 @@ function beginPlayback(token,url){
       onsubtitlechange:function(duration,text){
         if(!state.player||state.player.token!==token)return;
         $('#subtitleText').textContent=text||'';
-        if(text)setTimeout(function(){if($('#subtitleText').textContent===text)$('#subtitleText').textContent=''},Number(duration)||2500);
+        if(text)setTimeout(function(){if(state.player&&state.player.token===token&&$('#subtitleText').textContent===text)$('#subtitleText').textContent=''},Number(duration)||2500);
       },
       onerror:function(e){console.error('AVPlay error',e);failPlayback('Ошибка AVPlay: '+String(e),token)}
     });
@@ -387,21 +424,15 @@ function beginPlayback(token,url){
       try{p.play()}catch(e){console.error(e);failPlayback('Не удалось начать воспроизведение',token);return}
       state.player.phase='playing';
       $('#playerBoot').classList.add('hidden');
-      setTimeout(function(){
-        selectCompatibleAudio();
-        restoreProgress(url,p,token,function(){
-          if(!state.player||state.player.token!==token)return;
-          refreshPlayerTrackSummary();
-          showPlayerMenu('#playerToggleButton');
-        });
-      },420);
+      if(document.hidden){handlePlayerVisibility();state.postStartPending={token:token,url:url};return}
+      setTimeout(function(){runPostStart(token,url,p)},420);
     },function(e){console.error('AVPlay prepare error',e);failPlayback('Не удалось подготовить видео',token)});
   }catch(e){console.error('AVPlay open error',e);failPlayback('Не удалось открыть видео',token)}
 }
 function startPlayback(url,title){
   if(!url){toast('У файла нет адреса воспроизведения');return}
   if(state.player){toast('Видео уже запускается');return}
-  clearSaveTimer();state.seekBusy=false;state.pendingStop=null;
+  clearSaveTimer();state.seekBusy=false;state.pendingStop=null;resetLifecycleState();
   state.playerToken++;
   var token=state.playerToken;
   state.mode='player';state.tracksOpen=false;
@@ -415,6 +446,7 @@ function startPlayback(url,title){
   setTimeout(function(){beginPlayback(token,url)},90);
 }
 function restoreProgress(url,p,token,onDone){
+  if(!state.player||state.player.token!==token)return;
   var finished=false;
   state.seekBusy=true;
   function finish(error){
@@ -423,6 +455,7 @@ function restoreProgress(url,p,token,onDone){
     if(error)console.warn('Restore progress seek failed',error);
     var pending=state.pendingStop;state.pendingStop=null;
     if(pending){stopPlayer(pending.completed);return}
+    if(state.pendingVisibility)handlePlayerVisibility();
     if(onDone)try{onDone()}catch(_){}
   }
   api('/api/progress?source_url='+encodeURIComponent(url)).then(function(x){
@@ -465,7 +498,7 @@ function updateProgress(pos,dur){
 function stopPlayer(completed){
   if(!state.player)return;
   if(state.seekBusy){state.pendingStop={completed:!!completed};return}
-  var pl=state.player,pos=0,dur=0;clearPlayerTimer();clearSaveTimer();state.pendingStop=null;
+  var pl=state.player,pos=0,dur=0;clearPlayerTimer();clearSaveTimer();state.pendingStop=null;resetLifecycleState();
   try{var p=webapis.avplay;pos=p.getCurrentTime();dur=p.getDuration()}catch(_){}
   if(pos<=0&&Number(pl.lastPosition||0)>0)pos=Number(pl.lastPosition);
   if(dur<=0&&Number(pl.lastDuration||0)>0)dur=Number(pl.lastDuration);
@@ -475,7 +508,7 @@ function stopPlayer(completed){
   saveProgress(pos,dur,completedNow,pl).then(function(){return loadContinue()}).then(function(){rebuildFocus($('#detailPlay')||null)});
 }
 function syncToggleButton(){
-  if(!state.player||!avAvailable())return;
+  if(!state.player||!avAvailable()||state.lifecycleSuspended)return;
   var st='';try{st=webapis.avplay.getState()}catch(_){}
   var paused=st==='PAUSED';
   $('#playerToggleIcon').textContent=paused?'▶':'Ⅱ';
@@ -483,11 +516,11 @@ function syncToggleButton(){
   $('#playerStateText').textContent=paused?'Пауза':'Воспроизведение';
 }
 function playerToggle(){
-  if(!state.player||state.player.phase!=='playing'||state.seekBusy)return;
+  if(!state.player||state.player.phase!=='playing'||state.seekBusy||state.lifecycleSuspended)return;
   try{var p=webapis.avplay,st=p.getState();if(st==='PLAYING')p.pause();else if(st==='PAUSED')p.play();syncToggleButton();showPlayerMenu('#playerToggleButton')}catch(e){toast('Пауза недоступна')}
 }
 function seek(delta,onDone){
-  if(!state.player||state.player.phase!=='playing'||state.seekBusy)return;
+  if(!state.player||state.player.phase!=='playing'||state.seekBusy||state.lifecycleSuspended)return;
   state.seekBusy=true;
   var finished=false;
   function finish(ok,error){
@@ -496,6 +529,7 @@ function seek(delta,onDone){
     if(error)console.warn('AVPlay seek failed',error);
     var pending=state.pendingStop;state.pendingStop=null;
     if(pending){stopPlayer(pending.completed);return}
+    if(state.pendingVisibility)handlePlayerVisibility();
     if(onDone)try{onDone(ok)}catch(_){}
   }
   try{
@@ -508,7 +542,7 @@ function seek(delta,onDone){
 function parseExtra(v){if(v&&typeof v==='object')return v;try{return JSON.parse(v||'{}')}catch(_){return {}}}
 function isDtsTrack(i){var x=parseExtra(i&&i.extra_info),c=String(x.fourCC||'').toUpperCase();return c.indexOf('DTS')>=0||c.indexOf('DCA')>=0}
 function selectCompatibleAudio(){
-  if(!state.player||state.player.phase!=='playing'||!avAvailable())return;
+  if(!state.player||state.player.phase!=='playing'||state.lifecycleSuspended||!avAvailable())return;
   try{
     var p=webapis.avplay,total=p.getTotalTrackInfo()||[],current=p.getCurrentStreamInfo()||[],selected=null,i;
     for(i=0;i<current.length;i++){if(current[i].type==='AUDIO'){selected=current[i];break}}
@@ -551,7 +585,7 @@ function focusPlayer(el){
   schedulePlayerMenuHide();
 }
 function showPlayerMenu(preferredSelector){
-  if(!state.player||state.player.phase!=='playing')return;
+  if(!state.player||state.player.phase!=='playing'||state.lifecycleSuspended)return;
   state.playerMenuOpen=true;state.playerPanel=null;
   $('#playerSettings').classList.add('hidden');$('#playerChrome').classList.remove('hidden');
   syncToggleButton();refreshPlayerTrackSummary();
@@ -566,7 +600,7 @@ function hidePlayerMenu(){
 }
 function getTrackSnapshot(){
   var out={total:[],current:[],selected:{}};
-  if(!state.player||state.player.phase!=='playing'||!avAvailable())return out;
+  if(!state.player||state.player.phase!=='playing'||state.lifecycleSuspended||!avAvailable())return out;
   try{out.total=webapis.avplay.getTotalTrackInfo()||[];out.current=webapis.avplay.getCurrentStreamInfo()||[]}catch(_){}
   out.current.forEach(function(x){out.selected[x.type]=Number(x.index)});return out;
 }
@@ -581,7 +615,7 @@ function settingOption(track,type,selected){
   return '<button class="player-setting-option player-focusable '+(selected?'selected':'')+'" data-track="'+type+'" data-index="'+track.index+'"><span class="setting-main">'+esc(d.name)+'</span><span class="setting-meta">'+esc(d.meta||((type==='AUDIO')?'Аудиодорожка':'Субтитры'))+'</span></button>';
 }
 function openPlayerPanel(kind){
-  if(!state.player||state.player.phase!=='playing'||state.seekBusy)return;
+  if(!state.player||state.player.phase!=='playing'||state.seekBusy||state.lifecycleSuspended)return;
   clearPlayerMenuTimer();state.playerMenuOpen=true;state.playerPanel=kind;state.playerFocusIndex=0;
   $('#playerChrome').classList.remove('hidden');$('#playerSettings').classList.remove('hidden');
   var snap=getTrackSnapshot(),html='',title=kind==='audio'?'Аудио':'Субтитры';
@@ -602,18 +636,19 @@ function closePlayerPanel(){
   refreshPlayerTrackSummary();focusPlayer(old==='audio'?$('#playerAudioButton'):$('#playerSubtitleButton'));schedulePlayerMenuHide();
 }
 function selectPlayerTrack(type,index,button){
-  if(!state.player||state.player.phase!=='playing'||state.seekBusy||!avAvailable())return;
+  if(!state.player||state.player.phase!=='playing'||state.seekBusy||state.lifecycleSuspended||!avAvailable())return;
   try{
-    var p=webapis.avplay,wasPaused=false;try{wasPaused=p.getState()==='PAUSED'}catch(_){}
+    var token=state.player.token,p=webapis.avplay,wasPaused=false;try{wasPaused=p.getState()==='PAUSED'}catch(_){}
     if(type==='AUDIO'&&wasPaused){p.play()}
     if(type==='TEXT'){p.setSilentSubtitle(false);state.player.subtitleOff=false}
     p.setSelectTrack(type,Number(index));
-    if(type==='AUDIO'&&wasPaused){setTimeout(function(){try{p.pause();syncToggleButton()}catch(_){}},120)}
+    if(type==='AUDIO'&&wasPaused){setTimeout(function(){if(!state.player||state.player.token!==token||state.lifecycleSuspended)return;try{if(p.getState()==='PLAYING')p.pause();syncToggleButton()}catch(_){}},120)}
     if(button){var d=button.querySelector('.setting-main');toast((type==='AUDIO'?'Аудио: ':'Субтитры: ')+(d?d.textContent:button.textContent),1800)}
-    setTimeout(function(){refreshPlayerTrackSummary();openPlayerPanel(type==='AUDIO'?'audio':'subtitles')},180);
+    setTimeout(function(){if(!state.player||state.player.token!==token||state.lifecycleSuspended)return;refreshPlayerTrackSummary();openPlayerPanel(type==='AUDIO'?'audio':'subtitles')},180);
   }catch(e){console.warn('Track switch failed',e);toast('Не удалось переключить дорожку',3000)}
 }
 function disableSubtitles(){
+  if(!state.player||state.seekBusy||state.lifecycleSuspended)return;
   try{webapis.avplay.setSilentSubtitle(true);state.player.subtitleOff=true;$('#subtitleText').textContent='';refreshPlayerTrackSummary();openPlayerPanel('subtitles');toast('Субтитры выключены',1600)}catch(e){toast('Не удалось выключить субтитры')}
 }
 function playerMove(dir){
@@ -721,7 +756,7 @@ var scan=$('#scanButton');if(scan)scan.onclick=function(){api('/api/scan',{metho
 $('#searchInput').addEventListener('input',function(){clearTimeout(state.searchTimer);state.searchTimer=setTimeout(runSearch,250)});
 window.addEventListener('keydown',key,true);
 document.addEventListener('click',handleClick,false);
-document.addEventListener('visibilitychange',function(){if(!state.player||state.player.phase!=='playing'||!avAvailable())return;try{document.hidden?webapis.avplay.suspend():webapis.avplay.restore()}catch(_){}});
+document.addEventListener('visibilitychange',handlePlayerVisibility);
 registerKeys();
 setInterval(function(){$('#clock').textContent=new Date().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})},1000);
 load();
