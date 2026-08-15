@@ -88,7 +88,7 @@ var avplay={
   getState:function(){return state},
   getCurrentTime:function(){return Math.round((ensureVideo().currentTime||0)*1000)},
   getDuration:function(){return durationMs()},
-  seekTo:function(ms){ensureVideo().currentTime=Math.max(0,Number(ms||0)/1000)},
+  seekTo:function(ms,onSuccess,onError){try{ensureVideo().currentTime=Math.max(0,Number(ms||0)/1000);if(onSuccess)setTimeout(onSuccess,0)}catch(e){if(onError)onError(e);else throw e}},
   jumpForward:function(ms,onSuccess,onError){try{var v=ensureVideo();v.currentTime=Math.min(isFinite(v.duration)?v.duration:Infinity,v.currentTime+Math.max(0,Number(ms||0))/1000);if(onSuccess)setTimeout(onSuccess,0)}catch(e){if(onError)onError(e);else throw e}},
   jumpBackward:function(ms,onSuccess,onError){try{var v=ensureVideo();v.currentTime=Math.max(0,v.currentTime-Math.max(0,Number(ms||0))/1000);if(onSuccess)setTimeout(onSuccess,0)}catch(e){if(onError)onError(e);else throw e}},
   getTotalTrackInfo:function(){return []},

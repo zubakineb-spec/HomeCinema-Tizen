@@ -387,7 +387,14 @@ function beginPlayback(token,url){
       try{p.play()}catch(e){console.error(e);failPlayback('Не удалось начать воспроизведение',token);return}
       state.player.phase='playing';
       $('#playerBoot').classList.add('hidden');
-      setTimeout(function(){selectCompatibleAudio();restoreProgress(url,p,token);refreshPlayerTrackSummary();showPlayerMenu('#playerToggleButton');},420);
+      setTimeout(function(){
+        selectCompatibleAudio();
+        restoreProgress(url,p,token,function(){
+          if(!state.player||state.player.token!==token)return;
+          refreshPlayerTrackSummary();
+          showPlayerMenu('#playerToggleButton');
+        });
+      },420);
     },function(e){console.error('AVPlay prepare error',e);failPlayback('Не удалось подготовить видео',token)});
   }catch(e){console.error('AVPlay open error',e);failPlayback('Не удалось открыть видео',token)}
 }
@@ -407,11 +414,25 @@ function startPlayback(url,title){
   try{window.focus();document.body.focus()}catch(_){}
   setTimeout(function(){beginPlayback(token,url)},90);
 }
-function restoreProgress(url,p,token){
+function restoreProgress(url,p,token,onDone){
+  var finished=false;
+  state.seekBusy=true;
+  function finish(error){
+    if(finished)return;
+    finished=true;state.seekBusy=false;
+    if(error)console.warn('Restore progress seek failed',error);
+    var pending=state.pendingStop;state.pendingStop=null;
+    if(pending){stopPlayer(pending.completed);return}
+    if(onDone)try{onDone()}catch(_){}
+  }
   api('/api/progress?source_url='+encodeURIComponent(url)).then(function(x){
-    if(!state.player||state.player.token!==token)return;
-    if(x.position_ms>15000&&x.completed!==1){try{p.seekTo(x.position_ms)}catch(_){}}
-  }).catch(function(){});
+    if(!state.player||state.player.token!==token){finish();return}
+    if(x.position_ms>15000&&x.completed!==1){
+      try{p.seekTo(x.position_ms,function(){finish()},function(e){finish(e)});return}
+      catch(e){finish(e);return}
+    }
+    finish();
+  }).catch(function(e){finish(e)});
 }
 function saveProgress(pos,dur,completed,player){
   var pl=player||state.player;if(!pl)return;
