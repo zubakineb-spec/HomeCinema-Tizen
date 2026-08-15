@@ -21,14 +21,13 @@ assert(html.includes('This product uses the TMDB API but is not endorsed or cert
 assert(/https:\/\/www\.themoviedb\.org\/assets\/.*\.svg/.test(html), 'About must use an official TMDB SVG asset URL');
 assert(html.indexOf('js/rc-release.js') < html.indexOf('js/app.js'), 'RC capture handlers must load before app.js');
 assert(html.indexOf('js/rc3-selection-sync.js') < html.indexOf('js/rc3-fixes.js'), 'hero selection sync must preempt older RC3 hero interception');
-assert(html.indexOf('js/rc32-player-navigation.js') < html.indexOf('js/rc3-fixes.js'), 'RC3.2 player navigation must preempt older timeline handling');
-assert(html.indexOf('js/rc32-player-navigation.js') < html.indexOf('js/app.js'), 'RC3.2 player navigation must load before app.js');
+assert(html.indexOf('js/rc32-player-navigation.js') < html.indexOf('js/rc3-fixes.js'), 'timeline navigation must preempt older timeline handling');
+assert(html.indexOf('js/rc32-player-navigation.js') < html.indexOf('js/app.js'), 'timeline navigation must load before app.js');
 assert(html.indexOf('js/rc3-fixes.js') < html.indexOf('js/app.js'), 'RC3 key/persistence hooks must load before app.js');
 assert(html.includes('css/rc-release.css'), 'release styles must be loaded');
 assert(html.includes('css/rc3-fixes.css'), 'RC3 layout styles must be loaded');
 assert(html.includes('id="playerTimelineButton"'), 'player timeline must be remote-focusable');
 assert(html.includes('data-player-timeline="1"'), 'player timeline must expose the seek focus contract');
-assert(html.includes('↑ — шкала времени'), 'player hint must explain vertical timeline navigation');
 
 assert(rc.includes('code!==415&&code!==19'), 'dedicated MediaPlay and MediaPause keys must be handled');
 assert(rc.includes("code===415&&state==='PAUSED'"), 'MediaPlay must resume only from PAUSED');
@@ -53,24 +52,31 @@ assert(selectionSync.includes('stopImmediatePropagation'), 'hero sync must preve
 assert(selectionSync.includes('card.click()'), 'hero actions must route through the exact selected catalog card');
 
 assert(rc32nav.includes('code===38'), 'Up from player controls must focus the timeline');
-assert(rc32nav.includes('focusTimeline'), 'RC3.2 must have an explicit timeline focus transition');
+assert(rc32nav.includes('focusTimeline'), 'timeline navigation must have an explicit focus transition');
 assert(rc32nav.includes('code===40'), 'Down from timeline must return to player controls');
-assert(rc32nav.includes('focusControl'), 'RC3.2 must restore the previous player control');
-assert(rc32nav.includes('code===37||code===412'), 'Left/MediaRewind on timeline must seek backward');
-assert(rc32nav.includes('code===39||code===417'), 'Right/MediaFastForward on timeline must seek forward');
-assert(rc32nav.includes('stopImmediatePropagation'), 'RC3.2 navigation must preempt conflicting app.js key handling');
+assert(rc32nav.includes('focusControl'), 'timeline navigation must restore the previous player control');
+assert(rc32nav.includes('scrubTarget'), 'timeline must keep a visual target separate from current playback position');
+assert(rc32nav.includes('SCRUB_COMMIT_DELAY'), 'timeline scrubbing must debounce repeated remote presses');
+assert(rc32nav.includes('playerSeekPreview'), 'timeline scrubbing must show the target time clearly');
+assert(rc32nav.includes('playerScrubFill'), 'timeline scrubbing must show a visual target fill');
+assert(rc32nav.includes('seekTo(target'), 'timeline must commit one absolute seek after scrubbing');
+assert(!rc32nav.includes('jumpForward('), 'timeline must not issue a jump for every Right key press');
+assert(!rc32nav.includes('jumpBackward('), 'timeline must not issue a jump for every Left key press');
+assert(rc32nav.includes('stopImmediatePropagation'), 'timeline navigation must preempt conflicting app.js key handling');
 
 assert(rc3.includes('homecinema.playerPrefs.v1'), 'RC3 must persist player preferences');
 assert(rc3.includes('setSilentSubtitle'), 'RC3 must restore subtitle preference through AVPlay');
 assert(rc3.includes('rememberTrack'), 'RC3 must remember selected audio/text tracks');
 assert(rc3.includes('pickFeatured'), 'RC3 must choose a deterministic featured hero instead of the first catalog movie');
 assert(rc3.includes('episode-overview'), 'RC3 must render episode descriptions');
-assert(rc3.includes('timelineSeek'), 'RC3 must seek when the progress track is focused');
+assert(rc3.includes('timelineSeek'), 'RC3 must retain fallback focused timeline seek handling');
 assert(rc3.includes('stopImmediatePropagation'), 'RC3 timeline/hero capture must preempt conflicting app key handling');
 assert(rc3css.includes('.hero{height:500px}'), 'RC3 hero must be reduced to keep shelves clear');
-assert(rc3css.includes('.episode-overview'), 'RC3 episode description styles must exist');
-assert(rc3css.includes('font-size:18px'), 'episode descriptions must be readable from TV viewing distance');
-assert(rc3css.includes('.progress.player-focusable.focused'), 'RC3 timeline focus must be visible');
+assert(rc3css.includes('.episode-overview'), 'episode description styles must exist');
+assert(rc3css.includes('font-size:22px'), 'episode descriptions must be large enough for TV viewing distance');
+assert(rc3css.includes('-webkit-line-clamp:3'), 'episode descriptions must allow three readable lines');
+assert(rc3css.includes('.player-seek-preview'), 'scrub target time must have a visible preview bubble');
+assert(rc3css.includes('.player-scrub-fill'), 'scrub target must have a visible progress fill');
 
 console.log('PASS: Smart Remote dedicated Play/Pause keys');
 console.log('PASS: details/search/series focus contracts');
@@ -78,7 +84,7 @@ console.log('PASS: About/Credits remote flow');
 console.log('PASS: TMDB attribution notice and official logo URL');
 console.log('PASS: RC3 hero selection is bound to exact media type/id');
 console.log('PASS: RC3 featured hero and compact home layout');
-console.log('PASS: RC3.2 Up/Down player timeline navigation and Left/Right seek');
-console.log('PASS: RC3.2 episode descriptions are TV-readable');
-console.log('PASS: RC3 player preference persistence and focused timeline seek');
+console.log('PASS: RC3.3 debounced visual timeline scrub with one seekTo commit');
+console.log('PASS: RC3.3 episode descriptions are larger and three lines');
+console.log('PASS: RC3 player preference persistence');
 console.log('HOME_CINEMA_RELEASE_CANDIDATE_SMOKE=PASS');
