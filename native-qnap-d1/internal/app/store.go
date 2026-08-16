@@ -190,6 +190,7 @@ func (s *Store) ReplaceScan(movies []Movie, shows []Show, episodes []Episode) er
 		if old, ok := oldMovies[movies[i].SourceURL]; ok {
 			movies[i].ID = old.ID
 			movies[i].TMDBID = old.TMDBID
+			movies[i].RecognizedTitle = old.RecognizedTitle
 			movies[i].OriginalTitle = old.OriginalTitle
 			movies[i].Overview = old.Overview
 			movies[i].PosterURL = old.PosterURL
@@ -257,6 +258,7 @@ func (s *Store) ReplaceScan(movies []Movie, shows []Show, episodes []Episode) er
 
 func mergeShow(n, o Show) Show {
 	n.TMDBID = o.TMDBID
+	n.RecognizedTitle = o.RecognizedTitle
 	n.OriginalTitle = o.OriginalTitle
 	n.Overview = o.Overview
 	n.PosterURL = o.PosterURL
