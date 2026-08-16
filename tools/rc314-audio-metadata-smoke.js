@@ -9,8 +9,9 @@ function fail(message){
 
 const models = fs.readFileSync('native-qnap-d1/internal/app/models.go','utf8');
 const profile = fs.readFileSync('native-qnap-d1/internal/app/media_profile.go','utf8');
+const scanner = fs.readFileSync('native-qnap-d1/internal/app/scanner.go','utf8');
 const history = fs.readFileSync('native-qnap-d1/internal/app/ux_api.go','utf8');
-const config = fs.readFileSync('tv-app/js/config.js','utf8');
+const index = fs.readFileSync('tv-app/index.html','utf8');
 const audio = fs.readFileSync('tv-app/js/rc314-audio-metadata.js','utf8');
 const seek = fs.readFileSync('tv-app/js/rc32-player-navigation.js','utf8');
 
@@ -22,10 +23,14 @@ if(!profile.includes('stream_tags=language,title,handler_name'))fail('ffprobe do
 if(!profile.includes('detectAudioStudio'))fail('audio studio detector missing');
 if(!profile.includes('detectTranslationType'))fail('translation type detector missing');
 if(!profile.includes('profile.AudioTracks = append'))fail('per-track metadata is not persisted into media profile');
+if(!scanner.includes('reusableMediaProfile'))fail('RC3.14 profile migration helper missing');
+if(!scanner.includes('len(profile.AudioTracks) == 0'))fail('legacy profiles without AudioTracks are not forced through one reprobe');
 if(!history.includes('"media_profile": m.MediaProfile'))fail('movie continue/history metadata missing');
 if(!history.includes('"media_profile": episode.MediaProfile'))fail('episode continue/history metadata missing');
 if(!history.includes('"media_profile": next.MediaProfile'))fail('next-episode metadata missing');
-if(!config.includes('js/rc314-audio-metadata.js'))fail('RC3.14 audio layer is not loaded before app.js');
+const audioPos=index.indexOf('js/rc314-audio-metadata.js');
+const appPos=index.indexOf('js/app.js');
+if(audioPos<0||appPos<0||audioPos>appPos)fail('RC3.14 audio layer must load before app.js');
 for(const marker of [' — ','details.join(\' · \')','audio_tracks','HOME_CINEMA_AUDIO_PROFILES','data-rc314-base']){
   if(!audio.includes(marker))fail('compact audio UI marker missing: '+marker);
 }
@@ -36,6 +41,7 @@ if(!seek.includes('function clearScrubVisuals()'))fail('RC3.13 seek surface fix 
 if(!seek.includes('seekWatchdog=nativeSetTimeout(done,1800)'))fail('RC3.13 seek watchdog missing from combined release');
 
 console.log('PASS: ffprobe captures audio language/title/studio/translation/codec/channels');
+console.log('PASS: legacy profiles are re-probed once after RC3.14 upgrade');
 console.log('PASS: TV preserves AVPlay language labels and adds compact two-line attribution');
 console.log('PASS: missing studios are not invented; raw track title is used only when metadata provides it');
 console.log('PASS: RC3.13 seek artifact hotfix remains present in RC3.14');
