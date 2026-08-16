@@ -9,11 +9,24 @@ var scrubOrigin=0;
 var scrubWasPlaying=false;
 var seekInFlight=false;
 var seekWatchdog=null;
+
+/* RC3.23 keeps the proven interaction contract from RC3.4/RC3.5 but makes
+ * target movement independent from Samsung key-repeat cadence:
+ *   Up -> focus timeline
+ *   Left/Right -> choose target only
+ *   hold -> smooth accelerated target movement
+ *   keyup -> exactly one absolute seekTo()
+ */
 var SCRUB_STEP=10000;
 var SCRUB_STEP_MEDIUM=30000;
 var SCRUB_STEP_FAST=60000;
+var SCRUB_FRAME_MS=80;
+var SCRUB_HOLD_DELAY=320;
 var scrubHoldCount=0;
 var scrubHoldDirection=0;
+var scrubHoldTimer=null;
+var scrubKeyHeld=false;
+
 var nativeSetTimeout=window.setTimeout;
 var nativeClearTimeout=window.clearTimeout;
 
@@ -39,7 +52,15 @@ function playbackReady(){
   var p=av();if(!p)return false;
   try{var st=p.getState();return st==='PLAYING'||st==='PAUSED'}catch(_){return false}
 }
-function resetHold(){scrubHoldCount=0;scrubHoldDirection=0}
+function clearHoldTimer(){
+  if(scrubHoldTimer!==null){try{nativeClearTimeout(scrubHoldTimer)}catch(_){}scrubHoldTimer=null}
+}
+function resetHold(){
+  clearHoldTimer();
+  scrubHoldCount=0;
+  scrubHoldDirection=0;
+  scrubKeyHeld=false;
+}
 function holdStep(direction){
   if(scrubHoldDirection!==direction){scrubHoldDirection=direction;scrubHoldCount=0}
   scrubHoldCount++;
@@ -69,7 +90,7 @@ function setHint(text){var hint=$('.player-hint');if(hint)hint.textContent=text}
 function focusTimeline(){
   var t=timeline();if(!t)return;
   clearPlayerFocus();t.classList.add('focused');try{t.focus()}catch(_){}
-  setHint('←/→ — выбрать позицию · удерживать: 10→30→60 сек · отпустить — перейти · OK — сразу · ↓ — к кнопкам · Назад — отменить');
+  setHint('←/→ — выбрать позицию · удерживать — плавно ускорить · отпустить — перейти · OK — сразу · ↓ — к кнопкам · Назад — отменить');
 }
 function focusControl(){
   var c=lastControl;
@@ -98,7 +119,7 @@ function hideScrubUi(delay){
     clearScrubVisuals();
   },delay||0);
 }
-function renderScrub(step){
+function renderScrub(speed){
   var ui=ensureScrubUi();if(!ui||!scrubDuration)return;
   var pct=clamp(scrubTarget/scrubDuration*100,0,100);
   ui.timeline.classList.add('scrubbing');
@@ -109,8 +130,8 @@ function renderScrub(step){
   var state=$('#playerStateText');
   if(state){
     var diff=Math.round((scrubTarget-scrubOrigin)/1000);
-    var stepText=step?(' · шаг '+Math.round(step/1000)+' сек'):'';
-    state.textContent='Выбрано '+formatTime(scrubTarget)+(diff===0?'':(' · '+(diff>0?'+':'')+diff+' сек'))+stepText;
+    var speedText=speed?(' · '+Math.round(speed/1000)+' сек/с'):'';
+    state.textContent='Выбрано '+formatTime(scrubTarget)+(diff===0?'':(' · '+(diff>0?'+':'')+diff+' сек'))+speedText;
   }
 }
 function beginScrub(){
@@ -123,14 +144,37 @@ function beginScrub(){
   scrubActive=true;scrubOrigin=pos;scrubTarget=pos;scrubDuration=dur;resetHold();
   renderScrub(0);return true;
 }
-function stepScrub(direction){
-  if(!scrubActive&&!beginScrub())return;
-  var step=holdStep(direction);
-  scrubTarget=clamp(scrubTarget+(direction*step),0,Math.max(0,scrubDuration-1000));
-  renderScrub(step);
+function smoothHoldTick(){
+  if(!scrubActive||!scrubKeyHeld||!scrubHoldDirection){clearHoldTimer();return}
+  var speed=holdStep(scrubHoldDirection);
+  var delta=speed*SCRUB_FRAME_MS/1000;
+  scrubTarget=clamp(scrubTarget+(scrubHoldDirection*delta),0,Math.max(0,scrubDuration-1000));
+  renderScrub(speed);
+  scrubHoldTimer=nativeSetTimeout(smoothHoldTick,SCRUB_FRAME_MS);
 }
+function startSmoothHold(direction){
+  if(!scrubActive&&!beginScrub())return false;
+
+  /* Samsung emits repeated keydown events at an uneven cadence. Ignore those
+   * repeats and let our own 80ms clock move the target smoothly. */
+  if(scrubKeyHeld&&scrubHoldDirection===direction)return true;
+
+  clearHoldTimer();
+  scrubHoldCount=0;
+  scrubHoldDirection=direction;
+  scrubKeyHeld=true;
+
+  /* Preserve the familiar short-press contract: one tap selects +/-10 sec.
+   * Holding then continues smoothly from that point. */
+  scrubTarget=clamp(scrubTarget+(direction*SCRUB_STEP),0,Math.max(0,scrubDuration-1000));
+  renderScrub(SCRUB_STEP);
+  scrubHoldTimer=nativeSetTimeout(smoothHoldTick,SCRUB_HOLD_DELAY);
+  return true;
+}
+function stepScrub(direction){return startSmoothHold(direction)}
 function commitScrub(immediateFeedback){
   if(!scrubActive||seekInFlight)return;
+  clearHoldTimer();
   var p=av(),target=Math.round(scrubTarget),label=formatTime(target),resume=scrubWasPlaying;
   scrubActive=false;seekInFlight=true;scrubWasPlaying=false;resetHold();
 
@@ -156,6 +200,7 @@ function commitScrub(immediateFeedback){
 }
 function cancelScrub(){
   if(!scrubActive)return;
+  clearHoldTimer();
   var p=av(),resume=scrubWasPlaying;
   scrubActive=false;scrubWasPlaying=false;clearSeekWatchdog();resetHold();clearScrubVisuals();
   if(resume&&p&&playerActive()){try{if(p.getState()==='PAUSED')p.play()}catch(_){}}
@@ -216,8 +261,17 @@ window.addEventListener('keyup',function(e){
   var code=Number(e.keyCode||e.which||0);
   if(!playerChromeVisible()||settingsOpen()||!timelineFocused()||!scrubActive)return;
   if(code!==37&&code!==39&&code!==412&&code!==417)return;
-  consume(e);commitScrub(false);return false;
+  consume(e);clearHoldTimer();scrubKeyHeld=false;commitScrub(false);return false;
 },true);
+
+window.HOME_CINEMA_RC323={
+  marker:'rc3.23-smooth-timeline-hold',
+  frameMs:SCRUB_FRAME_MS,
+  holdDelayMs:SCRUB_HOLD_DELAY,
+  tapStepMs:SCRUB_STEP,
+  owner:'rc32-player-navigation.js',
+  commit:'keyup-one-seekTo'
+};
 
 ensureScrubUi();
 })();
