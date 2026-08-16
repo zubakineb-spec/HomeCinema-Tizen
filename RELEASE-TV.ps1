@@ -1,5 +1,5 @@
 param(
-    [string]$RC = 'rc3.11',
+    [string]$RC = 'rc3.12',
     [string]$CertificateProfile = 'HomeCinemaTV-FRESH',
     [string]$TvIp = '192.168.0.103',
     [switch]$Install,
@@ -55,7 +55,7 @@ if (-not $SkipLocalTests) {
                 'tools/player-exit-navigation-smoke.js',
                 'tools/root-back-exit-smoke.js',
                 'tools/rc311-series-back-smoke.js',
-                'tools/rc311-icon-smoke.js',
+                'tools/rc312-icon-smoke.js',
                 'tools/rc37-enhancements-smoke.js',
                 'tools/player-ux-rc37-smoke.js',
                 'tools/search-player-surface-smoke.js',
@@ -75,7 +75,7 @@ if (-not $SkipLocalTests) {
                 'tools/player-exit-navigation-smoke.js',
                 'tools/root-back-exit-smoke.js',
                 'tools/rc311-series-back-smoke.js',
-                'tools/rc311-icon-smoke.js',
+                'tools/rc312-icon-smoke.js',
                 'tools/rc37-enhancements-smoke.js',
                 'tools/player-ux-rc37-smoke.js',
                 'tools/search-player-surface-smoke.js',
@@ -101,17 +101,29 @@ if (-not $SkipLocalTests) {
     }
 }
 
-Run-Step 'NORMALIZE SAMSUNG PACKAGE ICON' {
-    $Normalizer = Join-Path $PSScriptRoot 'tools\NORMALIZE-TV-ICON.ps1'
-    $IconPath = Join-Path $PSScriptRoot 'tv-app\icon.png'
-    if (-not (Test-Path $Normalizer)) { Fail "ICON_NORMALIZER_MISSING=$Normalizer" }
-    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $Normalizer -IconPath $IconPath -CanvasSize 117 -ArtworkSize 92
-    if ($LASTEXITCODE -ne 0) { Fail "ICON_NORMALIZATION_FAILED=$LASTEXITCODE" }
-}
+$Normalizer = Join-Path $PSScriptRoot 'tools\NORMALIZE-TV-ICON.ps1'
+$IconPath = Join-Path $PSScriptRoot 'tv-app\icon.png'
+$IconBackup = Join-Path $env:TEMP ("HomeCinema-icon-" + [Guid]::NewGuid().ToString('N') + '.png')
+if (-not (Test-Path $Normalizer)) { Fail "ICON_NORMALIZER_MISSING=$Normalizer" }
+if (-not (Test-Path $IconPath)) { Fail "ICON_MISSING=$IconPath" }
+Copy-Item $IconPath $IconBackup -Force
 
-Run-Step 'BUILD + SAMSUNG SIGN' {
-    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'BUILD-SAMSUNG-WGT.ps1') -CertificateProfile $CertificateProfile
-    if ($LASTEXITCODE -ne 0) { Fail "BUILD_FAILED=$LASTEXITCODE" }
+try {
+    Run-Step 'NORMALIZE SAMSUNG PACKAGE ICON' {
+        & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $Normalizer -IconPath $IconPath -CanvasSize 117 -TileWidth 110 -TileHeight 62 -CornerRadius 7
+        if ($LASTEXITCODE -ne 0) { Fail "ICON_NORMALIZATION_FAILED=$LASTEXITCODE" }
+    }
+
+    Run-Step 'BUILD + SAMSUNG SIGN' {
+        & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'BUILD-SAMSUNG-WGT.ps1') -CertificateProfile $CertificateProfile
+        if ($LASTEXITCODE -ne 0) { Fail "BUILD_FAILED=$LASTEXITCODE" }
+    }
+}
+finally {
+    if (Test-Path $IconBackup) {
+        Copy-Item $IconBackup $IconPath -Force
+        Remove-Item $IconBackup -Force -ErrorAction SilentlyContinue
+    }
 }
 
 $Built = Join-Path $PSScriptRoot "dist\HomeCinema-Tizen-v$Version.wgt"
@@ -223,7 +235,8 @@ $Manifest = [ordered]@{
     sha256 = $Hash.Hash
     certificate_profile = $CertificateProfile
     icon_canvas = '117x117'
-    icon_artwork_max = '92x92'
+    icon_tile = '110x62'
+    icon_tile_aspect = '16:9'
     built_utc = [DateTime]::UtcNow.ToString('o')
     installed = $false
 }
@@ -248,7 +261,8 @@ Write-Host "WGT=$Target"
 Write-Host "WGT_SIZE=$($File.Length)"
 Write-Host "WGT_SHA256=$($Hash.Hash)"
 Write-Host "ICON_CANVAS=117x117"
-Write-Host "ICON_ARTWORK_MAX=92x92"
+Write-Host "ICON_TILE=110x62"
+Write-Host "ICON_TILE_ASPECT=16:9"
 Write-Host "MANIFEST=$ManifestTarget"
 Write-Host "TV_INSTALL=$([bool]$Install)"
 Write-Host '=============================================='
