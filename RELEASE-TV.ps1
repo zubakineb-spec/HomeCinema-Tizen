@@ -1,5 +1,5 @@
 param(
-    [string]$RC = 'rc3.14',
+    [string]$RC = 'rc3.15',
     [string]$CertificateProfile = 'HomeCinemaTV-FRESH',
     [string]$TvIp = '192.168.0.103',
     [switch]$Install,
@@ -50,6 +50,7 @@ if (-not $SkipLocalTests) {
                 'tv-app/js/rc39-cinematic-ui.js',
                 'tv-app/js/rc310-series-page.js',
                 'tv-app/js/rc314-audio-metadata.js',
+                'tv-app/js/rc315-skip-credits.js',
                 'tools/player-state-smoke.js',
                 'tools/progress-consistency-smoke.js',
                 'tools/player-lifecycle-smoke.js',
@@ -59,6 +60,7 @@ if (-not $SkipLocalTests) {
                 'tools/rc312-icon-smoke.js',
                 'tools/rc313-seek-surface-smoke.js',
                 'tools/rc314-audio-metadata-smoke.js',
+                'tools/rc315-skip-credits-smoke.js',
                 'tools/rc37-enhancements-smoke.js',
                 'tools/player-ux-rc37-smoke.js',
                 'tools/search-player-surface-smoke.js',
@@ -81,6 +83,7 @@ if (-not $SkipLocalTests) {
                 'tools/rc312-icon-smoke.js',
                 'tools/rc313-seek-surface-smoke.js',
                 'tools/rc314-audio-metadata-smoke.js',
+                'tools/rc315-skip-credits-smoke.js',
                 'tools/rc37-enhancements-smoke.js',
                 'tools/player-ux-rc37-smoke.js',
                 'tools/search-player-surface-smoke.js',
@@ -160,9 +163,11 @@ Run-Step 'VERIFY WGT' {
             'js/rc39-cinematic-ui.js',
             'js/rc310-series-page.js',
             'js/rc314-audio-metadata.js',
+            'js/rc315-skip-credits.js',
             'css/rc37-enhancements.css',
             'css/rc39-cinematic-ui.css',
-            'css/rc310-home-series.css'
+            'css/rc310-home-series.css',
+            'css/rc315-skip-credits.css'
         )) {
             if ($Entries -notcontains $Required) { Fail "WGT_MISSING_ENTRY=$Required" }
         }
@@ -180,6 +185,9 @@ Run-Step 'VERIFY WGT' {
         $ConfigXml = Read-ZipText 'config.xml'
         $EscapedVersion = [regex]::Escape($Version)
         if ($ConfigXml -notmatch ('version="' + $EscapedVersion + '"')) { Fail 'WGT_VERSION_CHECK_FAILED' }
+
+        $Index = Read-ZipText 'index.html'
+        if ($Index -notmatch 'js/rc315-skip-credits\.js' -or $Index -notmatch 'css/rc315-skip-credits\.css') { Fail 'WGT_RC315_LAYER_NOT_LOADED' }
 
         $IconEntry = $Zip.Entries | Where-Object { $_.FullName -eq 'icon.png' } | Select-Object -First 1
         if (-not $IconEntry) { Fail 'WGT_ICON_MISSING' }
@@ -229,11 +237,14 @@ Run-Step 'VERIFY WGT' {
             if ($SeriesPage -notmatch [regex]::Escape($Marker)) { Fail "WGT_RC310_SERIES_PAGE_MARKER_MISSING=$Marker" }
         }
 
-        $RouteConfig = Read-ZipText 'js/config.js'
-        if ($RouteConfig -notmatch 'js/rc314-audio-metadata\.js') { Fail 'WGT_RC314_AUDIO_LAYER_NOT_LOADED' }
         $AudioMetadata = Read-ZipText 'js/rc314-audio-metadata.js'
         foreach ($Marker in @('audio_tracks','HOME_CINEMA_AUDIO_PROFILES','details.join','channelLabel','codecLabel')) {
             if ($AudioMetadata -notmatch [regex]::Escape($Marker)) { Fail "WGT_RC314_AUDIO_MARKER_MISSING=$Marker" }
+        }
+
+        $SkipCredits = Read-ZipText 'js/rc315-skip-credits.js'
+        foreach ($Marker in @('Пропустить титры','credits_start_ms','lastPlaybackRatio=1','seekTo(target','HOME_CINEMA_RC315')) {
+            if ($SkipCredits -notmatch [regex]::Escape($Marker)) { Fail "WGT_RC315_SKIP_CREDITS_MARKER_MISSING=$Marker" }
         }
     } finally { $Zip.Dispose() }
 }
@@ -254,6 +265,7 @@ $Manifest = [ordered]@{
     icon_tile_aspect = '16:9'
     seek_surface_fix = 'rc3.13'
     audio_metadata = 'rc3.14-compact'
+    skip_credits = 'rc3.15-chapter-markers'
     built_utc = [DateTime]::UtcNow.ToString('o')
     installed = $false
 }
@@ -277,11 +289,9 @@ Write-Host "SOURCE_SHA=$SourceSha"
 Write-Host "WGT=$Target"
 Write-Host "WGT_SIZE=$($File.Length)"
 Write-Host "WGT_SHA256=$($Hash.Hash)"
-Write-Host "ICON_CANVAS=117x117"
-Write-Host "ICON_TILE=110x62"
-Write-Host "ICON_TILE_ASPECT=16:9"
 Write-Host 'SEEK_SURFACE_FIX=rc3.13'
 Write-Host 'AUDIO_METADATA=rc3.14-compact'
+Write-Host 'SKIP_CREDITS=rc3.15-chapter-markers'
 Write-Host "MANIFEST=$ManifestTarget"
 Write-Host "TV_INSTALL=$([bool]$Install)"
 Write-Host '=============================================='
