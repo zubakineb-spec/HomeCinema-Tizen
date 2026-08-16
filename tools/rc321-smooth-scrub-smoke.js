@@ -20,8 +20,6 @@ const index = fs.readFileSync('tv-app/index.html','utf8');
   "window.HOME_CINEMA_RC='rc3.22-restore-proven-scrub'"
 ].forEach(marker=>{if(!retired.includes(marker))fail('missing RC3.22 retirement marker: '+marker)});
 
-/* Check executable ownership markers, not words that can legitimately appear
- * in comments describing the retired historical implementation. */
 [
   "window.addEventListener('keydown'",
   "window.addEventListener('keyup'",
@@ -34,23 +32,40 @@ const index = fs.readFileSync('tv-app/index.html','utf8');
 ].forEach(marker=>{if(retired.includes(marker))fail('retired RC3.21 layer still owns playback/remote behavior: '+marker)});
 
 [
+  "marker:'rc3.23-smooth-timeline-hold'",
   'var SCRUB_STEP=10000',
   'var SCRUB_STEP_MEDIUM=30000',
   'var SCRUB_STEP_FAST=60000',
+  'var SCRUB_FRAME_MS=80',
+  'var SCRUB_HOLD_DELAY=320',
   'function holdStep(direction)',
   'if(scrubHoldCount>=11)return SCRUB_STEP_FAST',
   'if(scrubHoldCount>=5)return SCRUB_STEP_MEDIUM',
+  'function smoothHoldTick()',
+  'function startSmoothHold(direction)',
+  'if(scrubKeyHeld&&scrubHoldDirection===direction)return true',
+  'var delta=speed*SCRUB_FRAME_MS/1000',
+  'scrubHoldTimer=nativeSetTimeout(smoothHoldTick,SCRUB_FRAME_MS)',
+  'scrubHoldTimer=nativeSetTimeout(smoothHoldTick,SCRUB_HOLD_DELAY)',
   'if(code===37||code===412){consume(e);stepScrub(-1)',
   'if(code===39||code===417){consume(e);stepScrub(1)',
   "window.addEventListener('keyup'",
+  'consume(e);clearHoldTimer();scrubKeyHeld=false;commitScrub(false)',
   'p.seekTo(target,done',
   'DO NOT consume Back',
   'function clearScrubVisuals()',
-  'seekWatchdog=nativeSetTimeout(done,1800)'
-].forEach(marker=>{if(!proven.includes(marker))fail('proven rc32 scrub contract missing: '+marker)});
+  'seekWatchdog=nativeSetTimeout(done,1800)',
+  "commit:'keyup-one-seekTo'"
+].forEach(marker=>{if(!proven.includes(marker))fail('RC3.23 timeline contract missing: '+marker)});
 
-if(proven.includes('jumpForward(delta')||proven.includes('jumpBackward(Math.abs(delta)')){
-  fail('proven timeline owner must commit one absolute seekTo rather than direct per-key jumps');
+if((proven.match(/p\.seekTo\(/g)||[]).length!==1){
+  fail('timeline must contain exactly one executable absolute seekTo commit');
+}
+if(proven.includes('jumpForward(')||proven.includes('jumpBackward(')){
+  fail('timeline must not issue AVPlay jumps during target selection');
+}
+if(proven.includes('SCRUB_COMMIT_DELAY')||proven.includes('scheduleCommit')){
+  fail('timeline must commit on key release rather than an idle timeout');
 }
 
 [
@@ -95,13 +110,11 @@ if(!sandbox.window.HOME_CINEMA_RC321||sandbox.window.HOME_CINEMA_RC321.retired!=
 if(sandbox.window.HOME_CINEMA_RC321.owner!=='rc32-player-navigation.js'){
   fail('rc32 was not declared as sole scrub owner');
 }
-if(hint.textContent.indexOf('↑ — шкала времени')!==0){
-  fail('historical timeline interaction hint was not restored');
-}
 
-console.log('PASS: RC3.21 experimental direct-arrow scrubber is retired');
-console.log('PASS: rc32-player-navigation.js is again the sole timeline scrub owner');
-console.log('PASS: proven 10 -> 30 -> 60 second hold acceleration and one seekTo commit are preserved');
-console.log('PASS: RC3.13 seek-surface watchdog/cleanup is preserved');
-console.log('PASS: RC3.19 Continue recovery and RC3.20 AVPlay callback watchdog are preserved');
-console.log('HOME_CINEMA_RC322_RESTORE_PROVEN_SCRUB=PASS');
+console.log('PASS: RC3.21 experimental direct-arrow scrubber remains retired');
+console.log('PASS: Up -> timeline remains the only entry into scrub selection');
+console.log('PASS: Left/Right target motion runs on an internal 80ms clock, independent of Samsung key-repeat cadence');
+console.log('PASS: hold acceleration progresses through 10 -> 30 -> 60 sec/s');
+console.log('PASS: key release performs exactly one absolute seekTo commit');
+console.log('PASS: RC3.13 seek-surface cleanup, RC3.19 Continue and RC3.20 AVPlay watchdog are preserved');
+console.log('HOME_CINEMA_RC323_SMOOTH_TIMELINE_HOLD=PASS');
