@@ -8,6 +8,20 @@
 }
 #playerTimelineButton:not(.scrubbing) #playerScrubFill{
   width:0!important;
+  visibility:hidden!important;
   opacity:0!important;
+}
+
+/* RC3.25: RC3.16 cleanup also writes inline opacity/visibility=0. Explicitly
+ * override that state when a new scrub begins, otherwise the purple target
+ * fill and time preview remain logically active but invisible. */
+#playerTimelineButton.scrubbing #playerScrubFill{
+  visibility:visible!important;
+  opacity:1!important;
+}
+#playerTimelineButton.scrubbing #playerSeekPreview{
+  display:block!important;
+  visibility:visible!important;
+  opacity:1!important;
 }
 #playerSeekPreview{pointer-events:none!important}
