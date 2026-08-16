@@ -51,20 +51,20 @@ func TestRC314LegacyAudioProfileForcesOneReprobe(t *testing.T) {
 		t.Fatal("legacy profiled file without AudioTracks must be re-probed after RC3.14/RC3.15 upgrade")
 	}
 	current := MediaProfile{
-		ProfileVersion: mediaProfileVersion,
+		ProfileVersion: rc316ProfileVersion,
 		Probed:         true,
 		AudioCodecs:    []string{"ac3"},
 		AudioTracks:    []AudioTrackProfile{{Codec: "ac3", Channels: 6}},
 	}
 	if !reusableMediaProfile(current) {
-		t.Fatal("current profile with AudioTracks should remain reusable")
+		t.Fatal("RC3.16 profile with AudioTracks should remain reusable")
 	}
 	legacyUnprobed := MediaProfile{Probed: false}
 	if reusableMediaProfile(legacyUnprobed) {
-		t.Fatal("legacy extension-only profile must receive the RC3.15 profile version once")
+		t.Fatal("legacy extension-only profile must receive the current profile version once")
 	}
-	currentUnprobed := MediaProfile{ProfileVersion: mediaProfileVersion, Probed: false}
+	currentUnprobed := MediaProfile{ProfileVersion: rc316ProfileVersion, Probed: false}
 	if !reusableMediaProfile(currentUnprobed) {
-		t.Fatal("current extension-only profile should not be re-probed forever when ffprobe is unavailable")
+		t.Fatal("current extension-only profile should not be re-probed forever when ffprobe/ffmpeg metadata is unavailable")
 	}
 }
