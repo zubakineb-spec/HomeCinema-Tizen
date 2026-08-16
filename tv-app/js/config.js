@@ -62,19 +62,3 @@
     };
   }
 })();
-
-// RC3.14 must wrap fetch before app.js starts loading the catalog. During normal
-// Tizen document parsing this parser-inserted local script is synchronous, which
-// keeps the audio metadata observer deterministic on Chromium 56. The document
-// guard preserves the existing headless API-origin regression harness.
-(function(){
-  if(typeof document==='undefined')return;
-  if(document.readyState==='loading'){
-    document.write('<script src="js/rc314-audio-metadata.js"><\/script>');
-    return;
-  }
-  var s=document.createElement('script');
-  s.src='js/rc314-audio-metadata.js';
-  s.async=false;
-  (document.head||document.documentElement).appendChild(s);
-})();
