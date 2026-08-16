@@ -38,9 +38,10 @@ func skipQNAPDir(name string) bool {
 }
 
 func reusableMediaProfile(profile MediaProfile) bool {
-	// RC3.15 adds chapter markers and keeps the RC3.14 per-track audio metadata.
-	// Reprobe legacy profiles exactly once so an existing library gains both.
-	if profile.ProfileVersion < mediaProfileVersion {
+	// RC3.16 upgrades the profile to use ffmpeg metadata when ffprobe is absent.
+	// Reprobe existing RC3.15 profiles exactly once so QNAP D1 installations
+	// that have ffmpeg but no ffprobe still gain audio attribution and chapters.
+	if profile.ProfileVersion < rc316ProfileVersion {
 		return false
 	}
 	if profile.Probed && len(profile.AudioCodecs) > 0 && len(profile.AudioTracks) == 0 {
@@ -111,7 +112,7 @@ func ScanLocalIncremental(cfg Config, previous State) ([]Movie, []Show, []Episod
 		if reused {
 			stats.Reused++
 		} else {
-			profile = profileLocalFile(path)
+			profile = profileLocalFileRC316(path)
 			stats.Profiled++
 		}
 
