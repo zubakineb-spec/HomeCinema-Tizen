@@ -1,0 +1,7 @@
+/* RC3.17: an empty subtitle node used to keep its translucent background and
+ * padding, producing a horizontal transparent strip over AVPlay. */
+#subtitleText:empty{
+  display:none!important;
+  padding:0!important;
+  background:transparent!important;
+}
