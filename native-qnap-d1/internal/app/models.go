@@ -1,16 +1,29 @@
 package app
 
+type AudioTrackProfile struct {
+	StreamIndex int    `json:"stream_index,omitempty"`
+	Language    string `json:"language,omitempty"`
+	Title       string `json:"title,omitempty"`
+	HandlerName string `json:"handler_name,omitempty"`
+	Codec       string `json:"codec,omitempty"`
+	Channels    int    `json:"channels,omitempty"`
+	Layout      string `json:"layout,omitempty"`
+	Studio      string `json:"studio,omitempty"`
+	Translation string `json:"translation,omitempty"`
+}
+
 type MediaProfile struct {
-	Container       string   `json:"container,omitempty"`
-	VideoCodec      string   `json:"video_codec,omitempty"`
-	Width           int      `json:"width,omitempty"`
-	Height          int      `json:"height,omitempty"`
-	HDR             bool     `json:"hdr,omitempty"`
-	AudioCodecs     []string `json:"audio_codecs,omitempty"`
-	SubtitleCodecs  []string `json:"subtitle_codecs,omitempty"`
-	Compatibility   string   `json:"compatibility,omitempty"`
-	Reason          string   `json:"compatibility_reason,omitempty"`
-	Probed          bool     `json:"probed,omitempty"`
+	Container       string              `json:"container,omitempty"`
+	VideoCodec      string              `json:"video_codec,omitempty"`
+	Width           int                 `json:"width,omitempty"`
+	Height          int                 `json:"height,omitempty"`
+	HDR             bool                `json:"hdr,omitempty"`
+	AudioCodecs     []string            `json:"audio_codecs,omitempty"`
+	AudioTracks     []AudioTrackProfile `json:"audio_tracks,omitempty"`
+	SubtitleCodecs  []string            `json:"subtitle_codecs,omitempty"`
+	Compatibility   string              `json:"compatibility,omitempty"`
+	Reason          string              `json:"compatibility_reason,omitempty"`
+	Probed          bool                `json:"probed,omitempty"`
 }
 
 type Movie struct {
