@@ -42,6 +42,7 @@ func historyItems(st State, includeCompleted bool) []historyItem {
 				"source_url": m.SourceURL, "image_url": m.PosterURL, "backdrop_url": m.BackdropURL,
 				"position_ms": p.PositionMS, "duration_ms": p.DurationMS, "updated_at": p.UpdatedAt,
 				"completed": p.Completed, "progress_percent": progressPercent(p),
+				"media_profile": m.MediaProfile,
 			})
 		}
 		for _, episode := range st.Episodes {
@@ -71,6 +72,7 @@ func historyItems(st State, includeCompleted bool) []historyItem {
 				"source_url": episode.SourceURL, "image_url": image, "backdrop_url": backdrop,
 				"position_ms": p.PositionMS, "duration_ms": p.DurationMS, "updated_at": p.UpdatedAt,
 				"completed": p.Completed, "show_id": episode.ShowID, "progress_percent": progressPercent(p),
+				"media_profile": episode.MediaProfile,
 			}
 			if !isExtra(episode) {
 				item["season"] = episode.Season
@@ -138,6 +140,7 @@ func (s *Server) nextEpisode(w http.ResponseWriter, r *http.Request) {
 			"season": next.Season, "episode": next.Episode, "title": next.Title,
 			"source_url": next.SourceURL, "still_url": next.StillURL,
 			"watched": p.Completed != 0, "progress_percent": progressPercent(p),
+			"media_profile": next.MediaProfile,
 		}})
 		return
 	}
