@@ -82,7 +82,7 @@ function tick(){
   var now=Date.now(),dt=Math.max(0,Math.min(120,now-lastTickAt));
   lastTickAt=now;
   var speed=speedFor(now-holdStartedAt);
-  target=clamp(target+(direction*speed*dt),0,Math.max(0,duration-500));
+  target=clamp(target+(direction*speed*dt/1000),0,Math.max(0,duration-500));
   render();
 }
 function begin(dir){
