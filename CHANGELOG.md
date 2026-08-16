@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.18 RC3.10 compact home + series page - 2026-08-16
+
+- Reduced the cinematic Home hero height from the RC3.9 layout and pulled the content shelves upward so more of the library is visible without losing the backdrop-first look.
+- Removed the Home-screen `Смотреть` and `Подробнее` CTA buttons from the visible layout.
+- Removed movie/show titles, metadata and `ФИЛЬМ` / `СЕРИАЛ` type labels below/on catalog cards; landscape artwork, rating and focus frame remain the primary selection cues.
+- Added a dedicated full-screen series browser page opened from any show card, including Search results.
+- The new series page has its own backdrop/title/metadata area, a separate season selector and a separate episode rail; OK on an episode keeps the existing `data-play-source` AVPlay contract.
+- Back closes the series page, while Back inside AVPlay remains handled by the proven player code; returning from playback keeps the series page available underneath.
+- Added `rc310-series-page-smoke.js`, CI coverage and signed-WGT release verification for the new compact Home and series-page layer.
+
 ## 0.3.18 RC3.9 cinematic UI - 2026-08-16
 
 - Reworked the Samsung home screen into a full-bleed cinematic layout inspired by modern streaming interfaces: large backdrop hero, oversized title, compact metadata line and content shelves overlapping the lower hero area.
