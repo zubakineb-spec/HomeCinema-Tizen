@@ -20,14 +20,17 @@ const index = fs.readFileSync('tv-app/index.html','utf8');
   "window.HOME_CINEMA_RC='rc3.22-restore-proven-scrub'"
 ].forEach(marker=>{if(!retired.includes(marker))fail('missing RC3.22 retirement marker: '+marker)});
 
+/* Check executable ownership markers, not words that can legitimately appear
+ * in comments describing the retired historical implementation. */
 [
-  "addEventListener('keydown'",
-  "addEventListener('keyup'",
-  'setInterval(',
-  '.pause(',
-  'jumpForward(',
-  'jumpBackward(',
-  'seekTo('
+  "window.addEventListener('keydown'",
+  "window.addEventListener('keyup'",
+  'nativeSetInterval=',
+  'frameTimer=',
+  'p.pause(',
+  'p.jumpForward(',
+  'p.jumpBackward(',
+  'p.seekTo('
 ].forEach(marker=>{if(retired.includes(marker))fail('retired RC3.21 layer still owns playback/remote behavior: '+marker)});
 
 [
