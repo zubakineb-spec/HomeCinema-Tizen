@@ -72,6 +72,7 @@ jobs:
           node --check tools/rc318-continue-started-at-smoke.js
           node --check tools/rc319-continue-recovery-smoke.js
           node --check tools/rc321-smooth-scrub-smoke.js
+          node --check tools/rc324-samsung-release-smoke.js
           node --check tools/rc37-enhancements-smoke.js
           node --check tools/player-ux-rc37-smoke.js
           node --check tools/search-player-surface-smoke.js
@@ -124,8 +125,11 @@ jobs:
       - name: TV RC3.19 Continue recovery gate
         run: node tools/rc319-continue-recovery-smoke.js
 
-      - name: TV RC3.21 smooth scrub gate
+      - name: TV RC3.21/RC3.24 scrub ownership gate
         run: node tools/rc321-smooth-scrub-smoke.js
+
+      - name: TV RC3.24 Samsung no-keyup scrub runtime gate
+        run: node tools/rc324-samsung-release-smoke.js
 
       - name: TV RC3.7 enhancement gate
         run: node tools/rc37-enhancements-smoke.js
