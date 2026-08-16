@@ -1,5 +1,5 @@
 param(
-    [string]$RC = 'rc3.10',
+    [string]$RC = 'rc3.11',
     [string]$CertificateProfile = 'HomeCinemaTV-FRESH',
     [string]$TvIp = '192.168.0.103',
     [switch]$Install,
@@ -54,6 +54,7 @@ if (-not $SkipLocalTests) {
                 'tools/player-lifecycle-smoke.js',
                 'tools/player-exit-navigation-smoke.js',
                 'tools/root-back-exit-smoke.js',
+                'tools/rc311-series-back-smoke.js',
                 'tools/rc37-enhancements-smoke.js',
                 'tools/player-ux-rc37-smoke.js',
                 'tools/search-player-surface-smoke.js',
@@ -72,6 +73,7 @@ if (-not $SkipLocalTests) {
                 'tools/player-lifecycle-smoke.js',
                 'tools/player-exit-navigation-smoke.js',
                 'tools/root-back-exit-smoke.js',
+                'tools/rc311-series-back-smoke.js',
                 'tools/rc37-enhancements-smoke.js',
                 'tools/player-ux-rc37-smoke.js',
                 'tools/search-player-surface-smoke.js',
@@ -154,6 +156,7 @@ Run-Step 'VERIFY WGT' {
 
         $Release = Read-ZipText 'js/rc-release.js'
         if ($Release -notmatch 'getCurrentApplication\(\)\.exit\(\)') { Fail 'WGT_ROOT_BACK_EXIT_MISSING' }
+        if ($Release -notmatch 'function seriesPageOpen\(\)' -or $Release -notmatch '!seriesPageOpen\(\)') { Fail 'WGT_RC311_SERIES_BACK_GUARD_MISSING' }
 
         $Enhancements = Read-ZipText 'js/rc37-enhancements.js'
         foreach ($Marker in @('/api/diagnostics','/api/history','/api/next','homecinema.favorites','homecinema.progress.queue')) {
