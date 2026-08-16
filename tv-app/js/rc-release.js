@@ -38,12 +38,16 @@ function playerVisible(){
   var p=document.getElementById('player');
   return !!p&&!p.classList.contains('hidden');
 }
+function seriesPageOpen(){
+  var p=document.getElementById('series310Page');
+  return !!p&&!p.classList.contains('hidden');
+}
 function hidden(id){
   var x=document.getElementById(id);
   return !x||x.classList.contains('hidden');
 }
 function rootScreenActive(){
-  return !playerVisible()&&hidden('details')&&hidden('searchOverlay')&&!aboutOpen();
+  return !playerVisible()&&!seriesPageOpen()&&hidden('details')&&hidden('searchOverlay')&&!aboutOpen();
 }
 function exitApplication(){
   try{
