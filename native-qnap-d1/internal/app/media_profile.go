@@ -7,9 +7,12 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
+
+const mediaProfileVersion = 315
 
 type profileProbeStream struct {
 	Index         int               `json:"index"`
@@ -25,11 +28,19 @@ type profileProbeStream struct {
 
 type profileProbeFormat struct {
 	FormatName string `json:"format_name"`
+	Duration   string `json:"duration"`
+}
+
+type profileProbeChapter struct {
+	StartTime string            `json:"start_time"`
+	EndTime   string            `json:"end_time"`
+	Tags      map[string]string `json:"tags"`
 }
 
 type profileProbeOut struct {
-	Streams []profileProbeStream `json:"streams"`
-	Format  profileProbeFormat   `json:"format"`
+	Streams  []profileProbeStream  `json:"streams"`
+	Chapters []profileProbeChapter `json:"chapters"`
+	Format   profileProbeFormat    `json:"format"`
 }
 
 func extensionContainer(path string) string {
@@ -74,6 +85,52 @@ func tagValue(tags map[string]string, names ...string) string {
 		}
 	}
 	return ""
+}
+
+func parseProbeMS(value string) int64 {
+	seconds, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
+	if err != nil || seconds <= 0 {
+		return 0
+	}
+	return int64(seconds*1000 + 0.5)
+}
+
+func isIntroChapter(title string) bool {
+	v := strings.ToLower(strings.TrimSpace(title))
+	return strings.Contains(v, "intro") || strings.Contains(v, "opening") || strings.Contains(v, "застав") || strings.Contains(v, "опенинг")
+}
+
+func isCreditsChapter(title string) bool {
+	v := strings.ToLower(strings.TrimSpace(title))
+	if strings.Contains(v, "opening credit") {
+		return false
+	}
+	return strings.Contains(v, "end credit") || strings.Contains(v, "closing credit") || strings.Contains(v, "credits") || strings.Contains(v, "титры") || strings.Contains(v, "ending") || strings.Contains(v, "outro")
+}
+
+func detectChapterMarkers(chapters []profileProbeChapter, durationMS int64) (int64, int64) {
+	var introEnd int64
+	var creditsStart int64
+	for _, chapter := range chapters {
+		title := tagValue(chapter.Tags, "title")
+		start := parseProbeMS(chapter.StartTime)
+		end := parseProbeMS(chapter.EndTime)
+		if isIntroChapter(title) && end > 0 {
+			if durationMS <= 0 || end <= durationMS/2 {
+				if introEnd == 0 || end < introEnd {
+					introEnd = end
+				}
+			}
+		}
+		if isCreditsChapter(title) && start > 0 {
+			if durationMS <= 0 || start >= durationMS/2 {
+				if start > creditsStart {
+					creditsStart = start
+				}
+			}
+		}
+	}
+	return introEnd, creditsStart
 }
 
 func detectAudioStudio(text string) string {
@@ -188,14 +245,14 @@ func mediaLocalPath(cfg Config, source string) (string, bool) {
 }
 
 func profileLocalFile(path string) MediaProfile {
-	profile := MediaProfile{Container: extensionContainer(path)}
+	profile := MediaProfile{ProfileVersion: mediaProfileVersion, Container: extensionContainer(path)}
 	if !tool("ffprobe") {
 		profile.Compatibility, profile.Reason = classifyCompatibility(profile)
 		return profile
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "ffprobe", "-v", "error", "-show_entries", "format=format_name:stream=index,codec_type,codec_name,width,height,color_transfer,channels,channel_layout:stream_tags=language,title,handler_name", "-of", "json", path)
+	cmd := exec.CommandContext(ctx, "ffprobe", "-v", "error", "-show_entries", "format=format_name,duration:stream=index,codec_type,codec_name,width,height,color_transfer,channels,channel_layout:stream_tags=language,title,handler_name:chapter=start_time,end_time:chapter_tags=title", "-of", "json", path)
 	out, err := cmd.Output()
 	if err != nil {
 		profile.Compatibility, profile.Reason = classifyCompatibility(profile)
@@ -210,6 +267,8 @@ func profileLocalFile(path string) MediaProfile {
 	if strings.TrimSpace(parsed.Format.FormatName) != "" {
 		profile.Container = strings.Split(parsed.Format.FormatName, ",")[0]
 	}
+	durationMS := parseProbeMS(parsed.Format.Duration)
+	profile.IntroEndMS, profile.CreditsStartMS = detectChapterMarkers(parsed.Chapters, durationMS)
 	var audio, subtitles []string
 	for _, stream := range parsed.Streams {
 		switch strings.ToLower(stream.CodecType) {
