@@ -26,7 +26,7 @@ if(!history.includes('"media_profile": m.MediaProfile'))fail('movie continue/his
 if(!history.includes('"media_profile": episode.MediaProfile'))fail('episode continue/history metadata missing');
 if(!history.includes('"media_profile": next.MediaProfile'))fail('next-episode metadata missing');
 if(!config.includes('js/rc314-audio-metadata.js'))fail('RC3.14 audio layer is not loaded before app.js');
-for(const marker of ['Русский',' — ','details.join(\' · \')','audio_tracks','HOME_CINEMA_AUDIO_PROFILES']){
+for(const marker of [' — ','details.join(\' · \')','audio_tracks','HOME_CINEMA_AUDIO_PROFILES','data-rc314-base']){
   if(!audio.includes(marker))fail('compact audio UI marker missing: '+marker);
 }
 if(!audio.includes("if(trim(meta.translation))details.push(trim(meta.translation))"))fail('translation type is not first compact metadata field');
@@ -36,6 +36,7 @@ if(!seek.includes('function clearScrubVisuals()'))fail('RC3.13 seek surface fix 
 if(!seek.includes('seekWatchdog=nativeSetTimeout(done,1800)'))fail('RC3.13 seek watchdog missing from combined release');
 
 console.log('PASS: ffprobe captures audio language/title/studio/translation/codec/channels');
-console.log('PASS: TV renders compact two-line audio attribution without inventing missing studios');
+console.log('PASS: TV preserves AVPlay language labels and adds compact two-line attribution');
+console.log('PASS: missing studios are not invented; raw track title is used only when metadata provides it');
 console.log('PASS: RC3.13 seek artifact hotfix remains present in RC3.14');
 console.log('HOME_CINEMA_RC314_AUDIO_METADATA_SMOKE=PASS');
