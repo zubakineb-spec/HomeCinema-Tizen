@@ -1,0 +1,26 @@
+.rc315-skip-credits{
+  position:absolute;
+  right:72px;
+  bottom:118px;
+  z-index:70;
+  min-width:292px;
+  height:66px;
+  padding:0 28px;
+  border:2px solid rgba(255,255,255,.72);
+  border-radius:12px;
+  background:rgba(6,8,10,.88);
+  color:#fff;
+  font-size:24px;
+  font-weight:700;
+  letter-spacing:.2px;
+  text-align:center;
+  box-shadow:0 12px 36px rgba(0,0,0,.48);
+}
+.rc315-skip-credits:focus,
+.rc315-skip-credits.focused{
+  outline:none;
+  border-color:#fff;
+  transform:scale(1.035);
+  background:rgba(20,22,24,.96);
+}
+.rc315-skip-credits.hidden{display:none!important}
