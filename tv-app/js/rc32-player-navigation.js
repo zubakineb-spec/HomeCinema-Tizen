@@ -11,27 +11,33 @@ var scrubPausedForHold=false;
 var seekInFlight=false;
 var seekWatchdog=null;
 
-/* RC3.24: Samsung TV Web officially documents remote handling around keydown.
- * Some physical TVs do not deliver a dependable DOM keyup for Smart Remote.
- * Keep keyup as the fastest release signal, but never depend on it:
+/* RC3.25: keep the RC3.24 Samsung no-keyup contract, restore the visible
+ * purple target surface after RC3.16 cleanup, and make release/autoresume
+ * tolerant of real Tizen 4 timing:
  *   Up -> focus timeline
  *   Left/Right first keydown -> choose +/-10 sec target only
  *   repeated keydown -> confirms a physical hold
  *   internal 80ms clock -> smooth accelerated target movement
- *   keyup OR repeat stream going quiet -> exactly one absolute seekTo()
+ *   keyup OR adaptive repeat-stream silence -> exactly one absolute seekTo()
+ *   playback that was running before scrub -> explicitly resume after seek
  */
 var SCRUB_STEP=10000;
 var SCRUB_STEP_MEDIUM=30000;
 var SCRUB_STEP_FAST=60000;
 var SCRUB_FRAME_MS=80;
-var SCRUB_INITIAL_RELEASE_MS=750;
-var SCRUB_REPEAT_RELEASE_MS=360;
+var SCRUB_INITIAL_RELEASE_MS=1100;
+var SCRUB_REPEAT_RELEASE_MIN_MS=520;
+var SCRUB_REPEAT_RELEASE_MAX_MS=1400;
+var SCRUB_REPEAT_RELEASE_DEFAULT_MS=720;
 var scrubHoldCount=0;
 var scrubHoldDirection=0;
 var scrubHoldTimer=null;
 var scrubReleaseTimer=null;
+var scrubReleaseDeadline=0;
 var scrubKeyHeld=false;
 var scrubRepeatSeen=false;
+var scrubLastKeydownAt=0;
+var scrubRepeatInterval=0;
 
 var nativeSetTimeout=window.setTimeout;
 var nativeClearTimeout=window.clearTimeout;
@@ -47,6 +53,7 @@ function playerActive(){var p=$('#player');return !!p&&!p.classList.contains('hi
 function settingsOpen(){var s=$('#playerSettings');return !!s&&!s.classList.contains('hidden')}
 function clearPlayerFocus(){$$('.player-focusable,#playerTimelineButton').forEach(function(x){x.classList.remove('focused')})}
 function clamp(v,min,max){return Math.max(min,Math.min(max,v))}
+function nowMs(){return (typeof Date!=='undefined'&&Date.now)?Date.now():(new Date()).getTime()}
 function formatTime(ms){
   var sec=Math.max(0,Math.floor(Number(ms||0)/1000));
   var h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60),s=sec%60;
@@ -63,6 +70,7 @@ function clearHoldTimer(){
 }
 function clearReleaseTimer(){
   if(scrubReleaseTimer!==null){try{nativeClearTimeout(scrubReleaseTimer)}catch(_){}scrubReleaseTimer=null}
+  scrubReleaseDeadline=0;
 }
 function resetHold(){
   clearHoldTimer();clearReleaseTimer();
@@ -71,6 +79,8 @@ function resetHold(){
   scrubKeyHeld=false;
   scrubRepeatSeen=false;
   scrubPausedForHold=false;
+  scrubLastKeydownAt=0;
+  scrubRepeatInterval=0;
 }
 function holdStep(direction){
   if(scrubHoldDirection!==direction){scrubHoldDirection=direction;scrubHoldCount=0}
@@ -93,7 +103,11 @@ function clearScrubVisuals(){
   var ui=ensureScrubUi();if(!ui)return;
   ui.timeline.classList.remove('scrubbing');
   ui.fill.style.width='0%';
+  ui.fill.style.opacity='0';
+  ui.fill.style.visibility='hidden';
   ui.preview.style.display='none';
+  ui.preview.style.visibility='hidden';
+  ui.preview.style.opacity='0';
   ui.preview.style.left='0%';
   ui.preview.textContent='';
 }
@@ -134,8 +148,16 @@ function renderScrub(speed){
   var ui=ensureScrubUi();if(!ui||!scrubDuration)return;
   var pct=clamp(scrubTarget/scrubDuration*100,0,100);
   ui.timeline.classList.add('scrubbing');
+
+  /* RC3.25: RC3.16 cleanup intentionally writes opacity/visibility inline.
+   * Restore them every time a new scrub starts so the purple target and time
+   * preview can actually become visible again. */
   ui.fill.style.width=pct+'%';
+  ui.fill.style.opacity='1';
+  ui.fill.style.visibility='visible';
   ui.preview.style.display='block';
+  ui.preview.style.visibility='visible';
+  ui.preview.style.opacity='1';
   ui.preview.style.left=pct+'%';
   ui.preview.textContent=formatTime(scrubTarget);
   var state=$('#playerStateText');
@@ -160,8 +182,24 @@ function pauseForConfirmedHold(){
   var p=av();if(!p)return;
   try{if(p.getState()==='PLAYING'){p.pause();scrubPausedForHold=true}}catch(_){}
 }
+function adaptiveReleaseDelay(){
+  if(!scrubRepeatInterval)return SCRUB_REPEAT_RELEASE_DEFAULT_MS;
+  return clamp(Math.round(scrubRepeatInterval*2+180),SCRUB_REPEAT_RELEASE_MIN_MS,SCRUB_REPEAT_RELEASE_MAX_MS);
+}
+function releaseScrubFromSilence(){
+  if(!scrubActive||!scrubKeyHeld)return;
+  clearHoldTimer();clearReleaseTimer();
+  scrubKeyHeld=false;
+  commitScrub(false);
+}
 function smoothHoldTick(){
   if(!scrubActive||!scrubKeyHeld||!scrubHoldDirection||!scrubRepeatSeen){clearHoldTimer();return}
+
+  /* RC3.25 has a second release path inside the 80ms motion clock. Even if a
+   * standalone release timer is lost/rearmed oddly by Tizen, repeat-stream
+   * silence still commits the selected target without requiring OK. */
+  if(scrubReleaseDeadline>0&&nowMs()>=scrubReleaseDeadline){releaseScrubFromSilence();return}
+
   var speed=holdStep(scrubHoldDirection);
   var delta=speed*SCRUB_FRAME_MS/1000;
   scrubTarget=clamp(scrubTarget+(scrubHoldDirection*delta),0,Math.max(0,scrubDuration-1000));
@@ -176,26 +214,32 @@ function startSmoothMotion(){
 }
 function armReleaseFallback(delay){
   clearReleaseTimer();
+  var safeDelay=Math.max(1,Number(delay||0));
+  scrubReleaseDeadline=nowMs()+safeDelay;
   scrubReleaseTimer=nativeSetTimeout(function(){
     scrubReleaseTimer=null;
     if(!scrubActive||!scrubKeyHeld)return;
+    scrubReleaseDeadline=0;
     clearHoldTimer();
     scrubKeyHeld=false;
     commitScrub(false);
-  },delay);
+  },safeDelay);
 }
 function handleScrubArrow(direction){
   if(!scrubActive&&!beginScrub())return false;
+  var now=nowMs();
 
-  /* First keydown selects a single +/-10s target. Do not start continuous
-   * motion yet: without a dependable keyup, only a repeated keydown proves
-   * that the physical button is actually being held. */
+  /* First keydown selects a single +/-10s target. The no-keyup fallback is
+   * deliberately longer than the first Samsung auto-repeat delay so a hold is
+   * not misclassified as a short tap before the first repeat arrives. */
   if(!scrubKeyHeld||scrubHoldDirection!==direction){
     clearHoldTimer();clearReleaseTimer();
     scrubHoldCount=0;
     scrubHoldDirection=direction;
     scrubKeyHeld=true;
     scrubRepeatSeen=false;
+    scrubLastKeydownAt=now;
+    scrubRepeatInterval=0;
     scrubTarget=clamp(scrubTarget+(direction*SCRUB_STEP),0,Math.max(0,scrubDuration-1000));
     renderScrub(SCRUB_STEP);
     armReleaseFallback(SCRUB_INITIAL_RELEASE_MS);
@@ -203,18 +247,37 @@ function handleScrubArrow(direction){
   }
 
   /* Same-direction keydown while the key is already logically held is a
-   * Samsung repeat. Use it only to confirm/refresh the hold; target movement
-   * itself remains on our stable 80ms clock. */
+   * Samsung repeat. Learn its cadence and arm a release window large enough
+   * not to fire between legitimate repeats. */
+  var sample=scrubLastKeydownAt>0?now-scrubLastKeydownAt:0;
+  if(sample>=25&&sample<=1800){
+    scrubRepeatInterval=scrubRepeatInterval?Math.round(scrubRepeatInterval*0.65+sample*0.35):sample;
+  }
+  scrubLastKeydownAt=now;
   if(!scrubRepeatSeen){scrubRepeatSeen=true;startSmoothMotion()}
-  armReleaseFallback(SCRUB_REPEAT_RELEASE_MS);
+  armReleaseFallback(adaptiveReleaseDelay());
   return true;
 }
 function stepScrub(direction){return handleScrubArrow(direction)}
+function resumeAfterSeek(p,resume,attempt){
+  if(!resume||!p||!playerActive())return;
+  var st='';try{st=p.getState()}catch(_){}
+  if(st==='PLAYING')return;
+
+  /* Tizen 4 can report PAUSED, READY or a transient state when the seek
+   * callback fires. Try play for every non-PLAYING state and verify a few
+   * times instead of requiring the state to be exactly PAUSED. */
+  try{p.play()}catch(_){}
+  if(attempt>=3)return;
+  nativeSetTimeout(function(){resumeAfterSeek(p,resume,attempt+1)},120+(attempt*160));
+}
 function commitScrub(immediateFeedback){
   if(!scrubActive||seekInFlight)return;
   clearHoldTimer();clearReleaseTimer();
-  var p=av(),target=Math.round(scrubTarget),label=formatTime(target),resume=scrubWasPlaying;
-  scrubActive=false;seekInFlight=true;scrubWasPlaying=false;resetHold();
+  var p=av(),target=Math.round(scrubTarget),label=formatTime(target),resume=!!(scrubWasPlaying||scrubPausedForHold);
+  scrubActive=false;seekInFlight=true;scrubWasPlaying=false;
+  scrubPausedForHold=false;
+  resetHold();
 
   /* RC3.13: clear the temporary seek surface immediately. On Tizen 4 the
    * preview/fill can otherwise remain composited over AVPlay after seekTo(). */
@@ -226,7 +289,7 @@ function commitScrub(immediateFeedback){
   var done=function(){
     if(settled)return;
     settled=true;clearSeekWatchdog();seekInFlight=false;clearScrubVisuals();
-    if(resume&&playerActive()){try{if(p.getState()==='PAUSED')p.play()}catch(_){}}
+    resumeAfterSeek(p,resume,0);
     if(state&&playerActive())state.textContent=resume?'Воспроизведение':'Пауза';
     if(playerChromeVisible()&&!settingsOpen()&&timelineFocused())focusTimeline();
   };
@@ -239,9 +302,9 @@ function commitScrub(immediateFeedback){
 function cancelScrub(){
   if(!scrubActive)return;
   clearHoldTimer();clearReleaseTimer();
-  var p=av(),resume=scrubWasPlaying;
-  scrubActive=false;scrubWasPlaying=false;clearSeekWatchdog();resetHold();clearScrubVisuals();
-  if(resume&&p&&playerActive()){try{if(p.getState()==='PAUSED')p.play()}catch(_){}}
+  var p=av(),resume=!!(scrubWasPlaying||scrubPausedForHold);
+  scrubActive=false;scrubWasPlaying=false;scrubPausedForHold=false;clearSeekWatchdog();resetHold();clearScrubVisuals();
+  resumeAfterSeek(p,resume,0);
   var state=$('#playerStateText');if(state&&playerActive())state.textContent=resume?'Воспроизведение':'Пауза';
 }
 
@@ -302,15 +365,19 @@ window.addEventListener('keyup',function(e){
   consume(e);clearHoldTimer();clearReleaseTimer();scrubKeyHeld=false;commitScrub(false);return false;
 },true);
 
-window.HOME_CINEMA_RC324={
-  marker:'rc3.24-samsung-release-detection',
+window.HOME_CINEMA_RC325={
+  marker:'rc3.25-visible-scrub-autoresume',
   frameMs:SCRUB_FRAME_MS,
   initialReleaseMs:SCRUB_INITIAL_RELEASE_MS,
-  repeatReleaseMs:SCRUB_REPEAT_RELEASE_MS,
+  repeatReleaseMinMs:SCRUB_REPEAT_RELEASE_MIN_MS,
+  repeatReleaseMaxMs:SCRUB_REPEAT_RELEASE_MAX_MS,
+  repeatReleaseDefaultMs:SCRUB_REPEAT_RELEASE_DEFAULT_MS,
   tapStepMs:SCRUB_STEP,
   owner:'rc32-player-navigation.js',
   holdConfirm:'repeated-keydown',
-  commit:'keyup-or-repeat-gap-one-seekTo'
+  commit:'keyup-or-adaptive-repeat-gap-one-seekTo',
+  visual:'restore-purple-fill-and-preview',
+  autoresume:'retry-non-playing-state'
 };
 
 ensureScrubUi();
