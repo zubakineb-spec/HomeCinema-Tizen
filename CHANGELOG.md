@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.18 RC3.8 - 2026-08-16
+
+- Fixed a Samsung Tizen native-layer artifact where the focused search input could remain visible over AVPlay/details viewing.
+- Added an isolated `rc38-search-surface.js` guard that blurs the search input, removes its focus marker, hides the input native surface and hides the search overlay before details/player viewing.
+- When a details card was opened from Search, Back now restores the real Search mode through the existing navigation handler instead of exposing a stale input layer.
+- Added `search-player-surface-smoke.js` and CI coverage; all existing AVPlay, Back, D-pad, Tizen 4, backend and ARMv7 build gates remain green.
+- Updated `RELEASE-TV.ps1` default candidate to `rc3.8` and made the signed WGT verification require the search-surface fix.
+
 ## 0.3.18 RC3.7 engineering - 2026-08-15
 
 - Added one-command `RELEASE-TV.ps1` pipeline for local tests, signed WGT build, package verification, SHA-256 manifest and optional TV install; installation is opt-in through `-Install` and is not part of the default release path.
@@ -12,7 +20,8 @@
 - Added player UX: 10→30→60 second accelerated timeline scrub while holding Left/Right, per-series audio/subtitle preference restore and configurable subtitle size.
 - Added incremental QNAP scanning based on source URL + file size + mtime so unchanged files reuse existing media profiles while new/changed files are re-profiled and removed files are counted.
 - Hardened `catalog.json` and `progress.json` persistence with file fsync, atomic rename, directory sync, three backup generations and automatic recovery from the newest valid backup.
-- Added dedicated RC3.7 JavaScript and Go regression tests and CI gates. This engineering candidate has not yet been installed on the physical TV.
+- Added dedicated RC3.7 JavaScript and Go regression tests and CI gates.
+- Signed `HomeCinema-Tizen-v0.3.18-rc3.7.wgt` was subsequently installed successfully on the physical Samsung UE49NU7500U and used as the baseline where the search-input native-layer artifact was observed.
 
 ## 0.3.18 RC3.6 - 2026-08-15
 
