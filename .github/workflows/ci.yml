@@ -50,6 +50,7 @@ jobs:
           node --check tv-app/js/rc37-enhancements.js
           node --check tv-app/js/rc38-search-surface.js
           node --check tv-app/js/rc39-cinematic-ui.js
+          node --check tv-app/js/rc310-series-page.js
           node --check tools/player-state-smoke.js
           node --check tools/progress-consistency-smoke.js
           node --check tools/player-lifecycle-smoke.js
@@ -59,6 +60,7 @@ jobs:
           node --check tools/player-ux-rc37-smoke.js
           node --check tools/search-player-surface-smoke.js
           node --check tools/cinematic-ui-smoke.js
+          node --check tools/rc310-series-page-smoke.js
           node --check tools/release-pipeline-smoke.js
           node --check tools/tizen4-compat-smoke.js
           node --check tools/release-candidate-smoke.js
@@ -90,6 +92,9 @@ jobs:
 
       - name: TV RC3.9 cinematic UI gate
         run: node tools/cinematic-ui-smoke.js
+
+      - name: TV RC3.10 compact home and series page gate
+        run: node tools/rc310-series-page-smoke.js
 
       - name: RC3.7 release pipeline safety gate
         run: node tools/release-pipeline-smoke.js
