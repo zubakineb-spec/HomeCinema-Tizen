@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"net/url"
 	"os/exec"
 	"path/filepath"
 	"sort"
@@ -11,12 +12,15 @@ import (
 )
 
 type profileProbeStream struct {
-	CodecType     string `json:"codec_type"`
-	CodecName     string `json:"codec_name"`
-	Width         int    `json:"width"`
-	Height        int    `json:"height"`
-	ColorTransfer string `json:"color_transfer"`
-	Channels      int    `json:"channels"`
+	Index          int               `json:"index"`
+	CodecType      string            `json:"codec_type"`
+	CodecName      string            `json:"codec_name"`
+	Width          int               `json:"width"`
+	Height         int               `json:"height"`
+	ColorTransfer  string            `json:"color_transfer"`
+	Channels       int               `json:"channels"`
+	ChannelLayout  string            `json:"channel_layout"`
+	Tags           map[string]string `json:"tags"`
 }
 
 type profileProbeFormat struct {
@@ -61,6 +65,71 @@ func uniqueSorted(values []string) []string {
 	return out
 }
 
+func tagValue(tags map[string]string, names ...string) string {
+	for _, name := range names {
+		for key, value := range tags {
+			if strings.EqualFold(strings.TrimSpace(key), name) {
+				return strings.TrimSpace(value)
+			}
+		}
+	}
+	return ""
+}
+
+func detectAudioStudio(text string) string {
+	v := strings.ToLower(strings.TrimSpace(text))
+	if v == "" {
+		return ""
+	}
+	studios := []struct {
+		name    string
+		aliases []string
+	}{
+		{"LostFilm", []string{"lostfilm", "lost film"}},
+		{"NewStudio", []string{"newstudio", "new studio"}},
+		{"Кураж-Бамбей", []string{"кураж-бамбей", "кураж бамбей", "kurazh-bambey"}},
+		{"Кубик в Кубе", []string{"кубик в кубе", "кубик-в-кубе", "kubik v kube"}},
+		{"HDRezka Studio", []string{"hdrezka studio", "hdrezka", "rezka studio"}},
+		{"Jaskier", []string{"jaskier"}},
+		{"AlexFilm", []string{"alexfilm", "alex film"}},
+		{"BaibaKo", []string{"baibako", "baiba ko"}},
+		{"ColdFilm", []string{"coldfilm", "cold film"}},
+		{"IdeaFilm", []string{"ideafilm", "idea film"}},
+		{"TVShows", []string{"tvshows", "tv shows"}},
+		{"Red Head Sound", []string{"red head sound", "redheadsound"}},
+		{"RuDub", []string{"rudub", "ru dub"}},
+		{"AniLibria", []string{"anilibria", "ани libria"}},
+	}
+	for _, studio := range studios {
+		for _, alias := range studio.aliases {
+			if strings.Contains(v, alias) {
+				return studio.name
+			}
+		}
+	}
+	return ""
+}
+
+func detectTranslationType(text string) string {
+	v := strings.ToLower(" " + strings.TrimSpace(text) + " ")
+	switch {
+	case strings.Contains(v, "многоголос") || strings.Contains(v, " mvo ") || strings.Contains(v, "[mvo]") || strings.Contains(v, "(mvo)"):
+		return "MVO"
+	case strings.Contains(v, "двухголос") || strings.Contains(v, " dvo ") || strings.Contains(v, "[dvo]") || strings.Contains(v, "(dvo)"):
+		return "DVO"
+	case strings.Contains(v, "дублирован") || strings.Contains(v, "дубляж") || strings.Contains(v, " dub ") || strings.Contains(v, "[dub]") || strings.Contains(v, "(dub)"):
+		return "DUB"
+	case strings.Contains(v, "одноголос") || strings.Contains(v, "авторск") || strings.Contains(v, " avo ") || strings.Contains(v, "[avo]") || strings.Contains(v, "(avo)"):
+		return "AVO"
+	case strings.Contains(v, "закадров"):
+		return "VO"
+	case strings.Contains(v, "original") || strings.Contains(v, "оригинал"):
+		return "Original"
+	default:
+		return ""
+	}
+}
+
 func classifyCompatibility(p MediaProfile) (string, string) {
 	if !p.Probed {
 		return "direct_expected", "extension_only"
@@ -91,6 +160,33 @@ func classifyCompatibility(p MediaProfile) (string, string) {
 	return "direct", "compatible"
 }
 
+func mediaLocalPath(cfg Config, source string) (string, bool) {
+	base, err := url.Parse(strings.TrimRight(cfg.MediaBaseURL, "/") + "/")
+	if err != nil {
+		return "", false
+	}
+	src, err := url.Parse(strings.TrimSpace(source))
+	if err != nil || src.Scheme != base.Scheme || src.Host != base.Host {
+		return "", false
+	}
+	basePath := strings.TrimRight(base.Path, "/") + "/"
+	if !strings.HasPrefix(src.Path, basePath) {
+		return "", false
+	}
+	rel := strings.TrimPrefix(src.Path, basePath)
+	rel = filepath.Clean(filepath.FromSlash(rel))
+	if rel == "." || rel == "" || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
+		return "", false
+	}
+	root := filepath.Clean(cfg.MediaRoot)
+	full := filepath.Clean(filepath.Join(root, rel))
+	check, err := filepath.Rel(root, full)
+	if err != nil || check == ".." || strings.HasPrefix(check, ".."+string(filepath.Separator)) {
+		return "", false
+	}
+	return full, true
+}
+
 func profileLocalFile(path string) MediaProfile {
 	profile := MediaProfile{Container: extensionContainer(path)}
 	if !tool("ffprobe") {
@@ -99,7 +195,7 @@ func profileLocalFile(path string) MediaProfile {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "ffprobe", "-v", "error", "-show_entries", "format=format_name:stream=codec_type,codec_name,width,height,color_transfer,channels", "-of", "json", path)
+	cmd := exec.CommandContext(ctx, "ffprobe", "-v", "error", "-show_entries", "format=format_name:stream=index,codec_type,codec_name,width,height,color_transfer,channels,channel_layout:stream_tags=language,title,handler_name", "-of", "json", path)
 	out, err := cmd.Output()
 	if err != nil {
 		profile.Compatibility, profile.Reason = classifyCompatibility(profile)
@@ -127,6 +223,21 @@ func profileLocalFile(path string) MediaProfile {
 			}
 		case "audio":
 			audio = append(audio, stream.CodecName)
+			language := tagValue(stream.Tags, "language")
+			title := tagValue(stream.Tags, "title")
+			handler := tagValue(stream.Tags, "handler_name")
+			attributionText := strings.TrimSpace(strings.Join([]string{title, handler}, " "))
+			profile.AudioTracks = append(profile.AudioTracks, AudioTrackProfile{
+				StreamIndex: stream.Index,
+				Language:    language,
+				Title:       title,
+				HandlerName: handler,
+				Codec:       strings.ToLower(stream.CodecName),
+				Channels:    stream.Channels,
+				Layout:      strings.ToLower(strings.TrimSpace(stream.ChannelLayout)),
+				Studio:      detectAudioStudio(attributionText),
+				Translation: detectTranslationType(attributionText),
+			})
 		case "subtitle":
 			subtitles = append(subtitles, stream.CodecName)
 		}
