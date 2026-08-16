@@ -38,8 +38,11 @@ func skipQNAPDir(name string) bool {
 }
 
 func reusableMediaProfile(profile MediaProfile) bool {
-	// RC3.14 added per-track audio metadata. A file probed by an older release can
-	// have audio codecs but no AudioTracks; force exactly one reprobe after upgrade.
+	// RC3.15 adds chapter markers and keeps the RC3.14 per-track audio metadata.
+	// Reprobe legacy profiles exactly once so an existing library gains both.
+	if profile.ProfileVersion < mediaProfileVersion {
+		return false
+	}
 	if profile.Probed && len(profile.AudioCodecs) > 0 && len(profile.AudioTracks) == 0 {
 		return false
 	}
