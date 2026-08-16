@@ -55,6 +55,7 @@ jobs:
           node --check tv-app/js/rc315-skip-credits.js
           node --check tv-app/js/rc316-regression-fixes.js
           node --check tv-app/js/rc318-continue-started-at.js
+          node --check tv-app/js/rc319-continue-recovery.js
           node --check tools/player-state-smoke.js
           node --check tools/progress-consistency-smoke.js
           node --check tools/player-lifecycle-smoke.js
@@ -68,6 +69,7 @@ jobs:
           node --check tools/rc316-regression-smoke.js
           node --check tools/rc317-regression-smoke.js
           node --check tools/rc318-continue-started-at-smoke.js
+          node --check tools/rc319-continue-recovery-smoke.js
           node --check tools/rc37-enhancements-smoke.js
           node --check tools/player-ux-rc37-smoke.js
           node --check tools/search-player-surface-smoke.js
@@ -116,6 +118,9 @@ jobs:
 
       - name: TV RC3.18 Continue playback-start gate
         run: node tools/rc318-continue-started-at-smoke.js
+
+      - name: TV RC3.19 Continue recovery gate
+        run: node tools/rc319-continue-recovery-smoke.js
 
       - name: TV RC3.7 enhancement gate
         run: node tools/rc37-enhancements-smoke.js
