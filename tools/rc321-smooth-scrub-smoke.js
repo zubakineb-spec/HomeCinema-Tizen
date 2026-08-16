@@ -14,11 +14,11 @@ const rc319 = fs.readFileSync('tv-app/js/rc319-continue-recovery.js','utf8');
 const index = fs.readFileSync('tv-app/index.html','utf8');
 
 [
-  "marker:'rc3.22-rc321-retired'",
+  "marker:'rc3.24-rc321-retired'",
   'retired:true',
   "owner:'rc32-player-navigation.js'",
-  "window.HOME_CINEMA_RC='rc3.22-restore-proven-scrub'"
-].forEach(marker=>{if(!retired.includes(marker))fail('missing RC3.22 retirement marker: '+marker)});
+  "window.HOME_CINEMA_RC='rc3.24-samsung-release-detection'"
+].forEach(marker=>{if(!retired.includes(marker))fail('missing RC3.24 retirement marker: '+marker)});
 
 [
   "window.addEventListener('keydown'",
@@ -32,31 +32,34 @@ const index = fs.readFileSync('tv-app/index.html','utf8');
 ].forEach(marker=>{if(retired.includes(marker))fail('retired RC3.21 layer still owns playback/remote behavior: '+marker)});
 
 [
-  "marker:'rc3.23-smooth-timeline-hold'",
+  "marker:'rc3.24-samsung-release-detection'",
   'var SCRUB_STEP=10000',
   'var SCRUB_STEP_MEDIUM=30000',
   'var SCRUB_STEP_FAST=60000',
   'var SCRUB_FRAME_MS=80',
-  'var SCRUB_HOLD_DELAY=320',
+  'var SCRUB_INITIAL_RELEASE_MS=750',
+  'var SCRUB_REPEAT_RELEASE_MS=360',
   'function holdStep(direction)',
-  'if(scrubHoldCount>=11)return SCRUB_STEP_FAST',
-  'if(scrubHoldCount>=5)return SCRUB_STEP_MEDIUM',
   'function smoothHoldTick()',
-  'function startSmoothHold(direction)',
-  'if(scrubKeyHeld&&scrubHoldDirection===direction)return true',
+  'function startSmoothMotion()',
+  'function armReleaseFallback(delay)',
+  'function handleScrubArrow(direction)',
+  'if(!scrubRepeatSeen){scrubRepeatSeen=true;startSmoothMotion()}',
+  'armReleaseFallback(SCRUB_INITIAL_RELEASE_MS)',
+  'armReleaseFallback(SCRUB_REPEAT_RELEASE_MS)',
   'var delta=speed*SCRUB_FRAME_MS/1000',
   'scrubHoldTimer=nativeSetTimeout(smoothHoldTick,SCRUB_FRAME_MS)',
-  'scrubHoldTimer=nativeSetTimeout(smoothHoldTick,SCRUB_HOLD_DELAY)',
   'if(code===37||code===412){consume(e);stepScrub(-1)',
   'if(code===39||code===417){consume(e);stepScrub(1)',
   "window.addEventListener('keyup'",
-  'consume(e);clearHoldTimer();scrubKeyHeld=false;commitScrub(false)',
+  'consume(e);clearHoldTimer();clearReleaseTimer();scrubKeyHeld=false;commitScrub(false)',
   'p.seekTo(target,done',
   'DO NOT consume Back',
   'function clearScrubVisuals()',
   'seekWatchdog=nativeSetTimeout(done,1800)',
-  "commit:'keyup-one-seekTo'"
-].forEach(marker=>{if(!proven.includes(marker))fail('RC3.23 timeline contract missing: '+marker)});
+  "holdConfirm:'repeated-keydown'",
+  "commit:'keyup-or-repeat-gap-one-seekTo'"
+].forEach(marker=>{if(!proven.includes(marker))fail('RC3.24 timeline contract missing: '+marker)});
 
 if((proven.match(/p\.seekTo\(/g)||[]).length!==1){
   fail('timeline must contain exactly one executable absolute seekTo commit');
@@ -64,8 +67,8 @@ if((proven.match(/p\.seekTo\(/g)||[]).length!==1){
 if(proven.includes('jumpForward(')||proven.includes('jumpBackward(')){
   fail('timeline must not issue AVPlay jumps during target selection');
 }
-if(proven.includes('SCRUB_COMMIT_DELAY')||proven.includes('scheduleCommit')){
-  fail('timeline must commit on key release rather than an idle timeout');
+if(!proven.includes('repeated keydown proves')){
+  fail('continuous scrub must start only after a repeat confirms physical hold');
 }
 
 [
@@ -105,7 +108,7 @@ vm.runInNewContext(retired,sandbox,{filename:'rc321-smooth-scrub.js'});
 if(keyHandlers!==0)fail('retired RC3.21 registered a remote handler at runtime');
 if(intervalCalls!==0)fail('retired RC3.21 started a scrub timer at runtime');
 if(!sandbox.window.HOME_CINEMA_RC321||sandbox.window.HOME_CINEMA_RC321.retired!==true){
-  fail('RC3.22 runtime retirement marker missing');
+  fail('RC3.24 runtime retirement marker missing');
 }
 if(sandbox.window.HOME_CINEMA_RC321.owner!=='rc32-player-navigation.js'){
   fail('rc32 was not declared as sole scrub owner');
@@ -113,8 +116,8 @@ if(sandbox.window.HOME_CINEMA_RC321.owner!=='rc32-player-navigation.js'){
 
 console.log('PASS: RC3.21 experimental direct-arrow scrubber remains retired');
 console.log('PASS: Up -> timeline remains the only entry into scrub selection');
-console.log('PASS: Left/Right target motion runs on an internal 80ms clock, independent of Samsung key-repeat cadence');
-console.log('PASS: hold acceleration progresses through 10 -> 30 -> 60 sec/s');
-console.log('PASS: key release performs exactly one absolute seekTo commit');
-console.log('PASS: RC3.13 seek-surface cleanup, RC3.19 Continue and RC3.20 AVPlay watchdog are preserved');
-console.log('HOME_CINEMA_RC323_SMOOTH_TIMELINE_HOLD=PASS');
+console.log('PASS: first Left/Right selects one 10-second target without requiring keyup');
+console.log('PASS: repeated keydown confirms hold; target motion then runs on the internal 80ms clock');
+console.log('PASS: keyup or repeat-stream silence commits exactly one absolute seekTo');
+console.log('PASS: RC3.13 seek cleanup, RC3.19 Continue and RC3.20 AVPlay watchdog are preserved');
+console.log('HOME_CINEMA_RC324_SAMSUNG_RELEASE=PASS');
