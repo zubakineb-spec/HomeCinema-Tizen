@@ -125,12 +125,13 @@ func (s *Server) enrich() map[string]int {
 	st := s.store.Snapshot()
 	out := map[string]int{"movies_matched": 0, "shows_matched": 0, "episodes_matched": 0}
 	for i := range st.Movies {
-		if st.Movies[i].MetadataStatus == "matched" {
+		if st.Movies[i].MetadataStatus == "matched" && strings.TrimSpace(st.Movies[i].RecognizedTitle) != "" {
 			continue
 		}
 		d, e := s.tmdb.Movie(st.Movies[i].Title, st.Movies[i].Year)
 		if e == nil && d.ID > 0 {
 			st.Movies[i].TMDBID = d.ID
+			st.Movies[i].RecognizedTitle = d.Title
 			st.Movies[i].OriginalTitle = d.OriginalTitle
 			st.Movies[i].Overview = d.Overview
 			st.Movies[i].PosterURL = image(d.PosterPath, "w500")
@@ -144,7 +145,7 @@ func (s *Server) enrich() map[string]int {
 	}
 	for i := range st.Shows {
 		preferredID := preferredTMDBShowID(st.Shows[i].Title)
-		needsShowLookup := st.Shows[i].MetadataStatus != "matched" || (preferredID > 0 && st.Shows[i].TMDBID != preferredID)
+		needsShowLookup := st.Shows[i].MetadataStatus != "matched" || strings.TrimSpace(st.Shows[i].RecognizedTitle) == "" || (preferredID > 0 && st.Shows[i].TMDBID != preferredID)
 		if needsShowLookup {
 			var d details
 			var e error
@@ -155,6 +156,7 @@ func (s *Server) enrich() map[string]int {
 			}
 			if e == nil && d.ID > 0 {
 				st.Shows[i].TMDBID = d.ID
+				st.Shows[i].RecognizedTitle = d.Name
 				st.Shows[i].OriginalTitle = d.OriginalName
 				st.Shows[i].Overview = d.Overview
 				st.Shows[i].PosterURL = image(d.PosterPath, "w500")
@@ -214,12 +216,12 @@ func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 	shows := []map[string]any{}
 	if q != "" {
 		for _, m := range st.Movies {
-			if strings.Contains(strings.ToLower(m.Title+" "+m.OriginalTitle), q) {
+			if strings.Contains(strings.ToLower(m.Title+" "+m.RecognizedTitle+" "+m.OriginalTitle), q) {
 				movies = append(movies, m)
 			}
 		}
 		for _, sh := range st.Shows {
-			if strings.Contains(strings.ToLower(sh.Title+" "+sh.OriginalTitle), q) {
+			if strings.Contains(strings.ToLower(sh.Title+" "+sh.RecognizedTitle+" "+sh.OriginalTitle), q) {
 				episodeCount, seasonCount, extraCount := showCounts(st, sh.ID)
 				x := toMap(sh)
 				x["episode_count"] = episodeCount
@@ -339,7 +341,7 @@ func (s *Server) progress(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) continueWatching(w http.ResponseWriter, r *http.Request) {
-	items := historyItems(s.store.Snapshot(), false)
+	items := continueItems(s.store.Snapshot())
 	if len(items) > 20 {
 		items = items[:20]
 	}
