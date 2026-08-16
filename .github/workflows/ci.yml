@@ -58,6 +58,7 @@ jobs:
           node --check tools/root-back-exit-smoke.js
           node --check tools/rc311-series-back-smoke.js
           node --check tools/rc312-icon-smoke.js
+          node --check tools/rc313-seek-surface-smoke.js
           node --check tools/rc37-enhancements-smoke.js
           node --check tools/player-ux-rc37-smoke.js
           node --check tools/search-player-surface-smoke.js
@@ -88,6 +89,9 @@ jobs:
 
       - name: TV RC3.12 Samsung wide icon gate
         run: node tools/rc312-icon-smoke.js
+
+      - name: TV RC3.13 seek surface regression gate
+        run: node tools/rc313-seek-surface-smoke.js
 
       - name: TV RC3.7 enhancement gate
         run: node tools/rc37-enhancements-smoke.js
