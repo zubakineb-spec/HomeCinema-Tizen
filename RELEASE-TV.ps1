@@ -1,5 +1,5 @@
 param(
-    [string]$RC = 'rc3.8',
+    [string]$RC = 'rc3.9',
     [string]$CertificateProfile = 'HomeCinemaTV-FRESH',
     [string]$TvIp = '192.168.0.103',
     [switch]$Install,
@@ -47,6 +47,7 @@ if (-not $SkipLocalTests) {
                 'tv-app/js/rc32-player-navigation.js',
                 'tv-app/js/rc37-enhancements.js',
                 'tv-app/js/rc38-search-surface.js',
+                'tv-app/js/rc39-cinematic-ui.js',
                 'tools/player-state-smoke.js',
                 'tools/progress-consistency-smoke.js',
                 'tools/player-lifecycle-smoke.js',
@@ -54,7 +55,8 @@ if (-not $SkipLocalTests) {
                 'tools/root-back-exit-smoke.js',
                 'tools/rc37-enhancements-smoke.js',
                 'tools/player-ux-rc37-smoke.js',
-                'tools/search-player-surface-smoke.js'
+                'tools/search-player-surface-smoke.js',
+                'tools/cinematic-ui-smoke.js'
             )
             foreach ($Rel in $JsFiles) {
                 $Path = Join-Path $PSScriptRoot $Rel
@@ -70,7 +72,8 @@ if (-not $SkipLocalTests) {
                 'tools/root-back-exit-smoke.js',
                 'tools/rc37-enhancements-smoke.js',
                 'tools/player-ux-rc37-smoke.js',
-                'tools/search-player-surface-smoke.js'
+                'tools/search-player-surface-smoke.js',
+                'tools/cinematic-ui-smoke.js'
             )) {
                 & node (Join-Path $PSScriptRoot $Smoke)
                 if ($LASTEXITCODE -ne 0) { Fail "SMOKE_FAILED=$Smoke" }
@@ -119,7 +122,9 @@ Run-Step 'VERIFY WGT' {
             'js/rc32-player-navigation.js',
             'js/rc37-enhancements.js',
             'js/rc38-search-surface.js',
-            'css/rc37-enhancements.css'
+            'js/rc39-cinematic-ui.js',
+            'css/rc37-enhancements.css',
+            'css/rc39-cinematic-ui.css'
         )) {
             if ($Entries -notcontains $Required) { Fail "WGT_MISSING_ENTRY=$Required" }
         }
@@ -153,6 +158,15 @@ Run-Step 'VERIFY WGT' {
         $SearchSurface = Read-ZipText 'js/rc38-search-surface.js'
         foreach ($Marker in @("input.blur()","input.style.visibility='hidden'","overlay.classList.add('hidden')",'MutationObserver')) {
             if ($SearchSurface -notmatch [regex]::Escape($Marker)) { Fail "WGT_RC38_SEARCH_SURFACE_MARKER_MISSING=$Marker" }
+        }
+
+        $Cinematic = Read-ZipText 'js/rc39-cinematic-ui.js'
+        foreach ($Marker in @("rc3.9-cinematic-ui","item.backdrop_url||item.poster_url",'cin-card-rating','MutationObserver')) {
+            if ($Cinematic -notmatch [regex]::Escape($Marker)) { Fail "WGT_RC39_CINEMATIC_MARKER_MISSING=$Marker" }
+        }
+        $CinematicCss = Read-ZipText 'css/rc39-cinematic-ui.css'
+        foreach ($Marker in @('height:720px','width:420px','height:236px','.cin-card-rating','box-shadow:0 0 0 5px #fff')) {
+            if ($CinematicCss -notmatch [regex]::Escape($Marker)) { Fail "WGT_RC39_CINEMATIC_CSS_MARKER_MISSING=$Marker" }
         }
     } finally { $Zip.Dispose() }
 }
