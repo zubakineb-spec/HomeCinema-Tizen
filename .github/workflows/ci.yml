@@ -48,6 +48,7 @@ jobs:
           node --check tv-app/js/rc-release.js
           node --check tv-app/js/rc32-player-navigation.js
           node --check tv-app/js/rc37-enhancements.js
+          node --check tv-app/js/rc38-search-surface.js
           node --check tools/player-state-smoke.js
           node --check tools/progress-consistency-smoke.js
           node --check tools/player-lifecycle-smoke.js
@@ -55,6 +56,7 @@ jobs:
           node --check tools/root-back-exit-smoke.js
           node --check tools/rc37-enhancements-smoke.js
           node --check tools/player-ux-rc37-smoke.js
+          node --check tools/search-player-surface-smoke.js
           node --check tools/release-pipeline-smoke.js
           node --check tools/tizen4-compat-smoke.js
           node --check tools/release-candidate-smoke.js
@@ -80,6 +82,9 @@ jobs:
 
       - name: TV RC3.7 player UX gate
         run: node tools/player-ux-rc37-smoke.js
+
+      - name: TV search/player native-surface gate
+        run: node tools/search-player-surface-smoke.js
 
       - name: RC3.7 release pipeline safety gate
         run: node tools/release-pipeline-smoke.js
