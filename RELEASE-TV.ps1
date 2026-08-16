@@ -1,5 +1,5 @@
 param(
-    [string]$RC = 'rc3.15',
+    [string]$RC = 'rc3.16',
     [string]$CertificateProfile = 'HomeCinemaTV-FRESH',
     [string]$TvIp = '192.168.0.103',
     [switch]$Install,
@@ -51,6 +51,7 @@ if (-not $SkipLocalTests) {
                 'tv-app/js/rc310-series-page.js',
                 'tv-app/js/rc314-audio-metadata.js',
                 'tv-app/js/rc315-skip-credits.js',
+                'tv-app/js/rc316-regression-fixes.js',
                 'tools/player-state-smoke.js',
                 'tools/progress-consistency-smoke.js',
                 'tools/player-lifecycle-smoke.js',
@@ -61,6 +62,7 @@ if (-not $SkipLocalTests) {
                 'tools/rc313-seek-surface-smoke.js',
                 'tools/rc314-audio-metadata-smoke.js',
                 'tools/rc315-skip-credits-smoke.js',
+                'tools/rc316-regression-smoke.js',
                 'tools/rc37-enhancements-smoke.js',
                 'tools/player-ux-rc37-smoke.js',
                 'tools/search-player-surface-smoke.js',
@@ -84,6 +86,7 @@ if (-not $SkipLocalTests) {
                 'tools/rc313-seek-surface-smoke.js',
                 'tools/rc314-audio-metadata-smoke.js',
                 'tools/rc315-skip-credits-smoke.js',
+                'tools/rc316-regression-smoke.js',
                 'tools/rc37-enhancements-smoke.js',
                 'tools/player-ux-rc37-smoke.js',
                 'tools/search-player-surface-smoke.js',
@@ -164,10 +167,12 @@ Run-Step 'VERIFY WGT' {
             'js/rc310-series-page.js',
             'js/rc314-audio-metadata.js',
             'js/rc315-skip-credits.js',
+            'js/rc316-regression-fixes.js',
             'css/rc37-enhancements.css',
             'css/rc39-cinematic-ui.css',
             'css/rc310-home-series.css',
-            'css/rc315-skip-credits.css'
+            'css/rc315-skip-credits.css',
+            'css/rc316-regression-fixes.css'
         )) {
             if ($Entries -notcontains $Required) { Fail "WGT_MISSING_ENTRY=$Required" }
         }
@@ -188,6 +193,7 @@ Run-Step 'VERIFY WGT' {
 
         $Index = Read-ZipText 'index.html'
         if ($Index -notmatch 'js/rc315-skip-credits\.js' -or $Index -notmatch 'css/rc315-skip-credits\.css') { Fail 'WGT_RC315_LAYER_NOT_LOADED' }
+        if ($Index -notmatch 'js/rc316-regression-fixes\.js' -or $Index -notmatch 'css/rc316-regression-fixes\.css') { Fail 'WGT_RC316_LAYER_NOT_LOADED' }
 
         $IconEntry = $Zip.Entries | Where-Object { $_.FullName -eq 'icon.png' } | Select-Object -First 1
         if (-not $IconEntry) { Fail 'WGT_ICON_MISSING' }
@@ -243,8 +249,17 @@ Run-Step 'VERIFY WGT' {
         }
 
         $SkipCredits = Read-ZipText 'js/rc315-skip-credits.js'
-        foreach ($Marker in @('Пропустить титры','credits_start_ms','lastPlaybackRatio=1','seekTo(target','HOME_CINEMA_RC315')) {
+        foreach ($Marker in @('credits_start_ms','lastPlaybackRatio=1','seekTo(target','HOME_CINEMA_RC315')) {
             if ($SkipCredits -notmatch [regex]::Escape($Marker)) { Fail "WGT_RC315_SKIP_CREDITS_MARKER_MISSING=$Marker" }
+        }
+
+        $RC316 = Read-ZipText 'js/rc316-regression-fixes.js'
+        foreach ($Marker in @('recognized_title=trim(value.title)','HOME_CINEMA_AUDIO_PROFILES','clearNativeSeekSurface','HOME_CINEMA_RC316')) {
+            if ($RC316 -notmatch [regex]::Escape($Marker)) { Fail "WGT_RC316_MARKER_MISSING=$Marker" }
+        }
+        $RC316Css = Read-ZipText 'css/rc316-regression-fixes.css'
+        foreach ($Marker in @('#playerTimelineButton:not(.scrubbing) #playerSeekPreview','#playerTimelineButton:not(.scrubbing) #playerScrubFill')) {
+            if ($RC316Css -notmatch [regex]::Escape($Marker)) { Fail "WGT_RC316_CSS_MARKER_MISSING=$Marker" }
         }
     } finally { $Zip.Dispose() }
 }
@@ -263,9 +278,11 @@ $Manifest = [ordered]@{
     icon_canvas = '117x117'
     icon_tile = '110x62'
     icon_tile_aspect = '16:9'
-    seek_surface_fix = 'rc3.13'
-    audio_metadata = 'rc3.14-compact'
+    seek_surface_fix = 'rc3.13+rc3.16-native-surface'
+    audio_metadata = 'rc3.16-ffmpeg-fallback'
     skip_credits = 'rc3.15-chapter-markers'
+    title_priority = 'rc3.16-local-title-first'
+    regression_fixes = 'rc3.16'
     built_utc = [DateTime]::UtcNow.ToString('o')
     installed = $false
 }
@@ -289,9 +306,11 @@ Write-Host "SOURCE_SHA=$SourceSha"
 Write-Host "WGT=$Target"
 Write-Host "WGT_SIZE=$($File.Length)"
 Write-Host "WGT_SHA256=$($Hash.Hash)"
-Write-Host 'SEEK_SURFACE_FIX=rc3.13'
-Write-Host 'AUDIO_METADATA=rc3.14-compact'
+Write-Host 'SEEK_SURFACE_FIX=rc3.13+rc3.16-native-surface'
+Write-Host 'AUDIO_METADATA=rc3.16-ffmpeg-fallback'
 Write-Host 'SKIP_CREDITS=rc3.15-chapter-markers'
+Write-Host 'TITLE_PRIORITY=rc3.16-local-title-first'
+Write-Host 'REGRESSION_FIXES=rc3.16'
 Write-Host "MANIFEST=$ManifestTarget"
 Write-Host "TV_INSTALL=$([bool]$Install)"
 Write-Host '=============================================='
