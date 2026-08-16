@@ -1,5 +1,5 @@
 param(
-    [string]$RC = 'rc3.7',
+    [string]$RC = 'rc3.8',
     [string]$CertificateProfile = 'HomeCinemaTV-FRESH',
     [string]$TvIp = '192.168.0.103',
     [switch]$Install,
@@ -46,13 +46,15 @@ if (-not $SkipLocalTests) {
                 'tv-app/js/rc-release.js',
                 'tv-app/js/rc32-player-navigation.js',
                 'tv-app/js/rc37-enhancements.js',
+                'tv-app/js/rc38-search-surface.js',
                 'tools/player-state-smoke.js',
                 'tools/progress-consistency-smoke.js',
                 'tools/player-lifecycle-smoke.js',
                 'tools/player-exit-navigation-smoke.js',
                 'tools/root-back-exit-smoke.js',
                 'tools/rc37-enhancements-smoke.js',
-                'tools/player-ux-rc37-smoke.js'
+                'tools/player-ux-rc37-smoke.js',
+                'tools/search-player-surface-smoke.js'
             )
             foreach ($Rel in $JsFiles) {
                 $Path = Join-Path $PSScriptRoot $Rel
@@ -67,7 +69,8 @@ if (-not $SkipLocalTests) {
                 'tools/player-exit-navigation-smoke.js',
                 'tools/root-back-exit-smoke.js',
                 'tools/rc37-enhancements-smoke.js',
-                'tools/player-ux-rc37-smoke.js'
+                'tools/player-ux-rc37-smoke.js',
+                'tools/search-player-surface-smoke.js'
             )) {
                 & node (Join-Path $PSScriptRoot $Smoke)
                 if ($LASTEXITCODE -ne 0) { Fail "SMOKE_FAILED=$Smoke" }
@@ -115,6 +118,7 @@ Run-Step 'VERIFY WGT' {
             'js/rc-release.js',
             'js/rc32-player-navigation.js',
             'js/rc37-enhancements.js',
+            'js/rc38-search-surface.js',
             'css/rc37-enhancements.css'
         )) {
             if ($Entries -notcontains $Required) { Fail "WGT_MISSING_ENTRY=$Required" }
@@ -144,6 +148,11 @@ Run-Step 'VERIFY WGT' {
         $Enhancements = Read-ZipText 'js/rc37-enhancements.js'
         foreach ($Marker in @('/api/diagnostics','/api/history','/api/next','homecinema.favorites','homecinema.progress.queue')) {
             if ($Enhancements -notmatch [regex]::Escape($Marker)) { Fail "WGT_RC37_MARKER_MISSING=$Marker" }
+        }
+
+        $SearchSurface = Read-ZipText 'js/rc38-search-surface.js'
+        foreach ($Marker in @("input.blur()","input.style.visibility='hidden'","overlay.classList.add('hidden')",'MutationObserver')) {
+            if ($SearchSurface -notmatch [regex]::Escape($Marker)) { Fail "WGT_RC38_SEARCH_SURFACE_MARKER_MISSING=$Marker" }
         }
     } finally { $Zip.Dispose() }
 }
