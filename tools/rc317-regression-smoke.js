@@ -28,7 +28,7 @@ need(server, 'items := continueItems(s.store.Snapshot())', 'continue endpoint');
 
 need(ux, 'func continueItems(st State)', 'series-aware continue');
 need(ux, 'historyItems(st, true)', 'completed progress awareness');
-need(ux, 'seenShows := map[int]bool{}', 'one card per series');
+need(ux, 'showItems := map[int][]historyItem{}', 'one card per series');
 need(ux, 'nextEpisodeAfter', 'completed episode advance');
 need(ux, 'preferredDisplayTitle', 'localized continue title');
 
