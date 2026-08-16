@@ -153,8 +153,8 @@ var MAX_RETRIES=20;
 var retryCount=0;
 var retryTimer=null;
 var patchedMethods={};
-var nativeSetTimeout=window.setTimeout;
-var nativeClearTimeout=window.clearTimeout;
+var nativeSetTimeout=typeof window.setTimeout==='function'?window.setTimeout:function(){return 0};
+var nativeClearTimeout=typeof window.clearTimeout==='function'?window.clearTimeout:function(){};
 
 function alreadyWrapped(fn){return !!(fn&&fn.__homeCinemaRC320SeekWatchdog)}
 function mark(name,value){patchedMethods[name]=!!value}
