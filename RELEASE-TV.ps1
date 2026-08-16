@@ -1,5 +1,5 @@
 param(
-    [string]$RC = 'rc3.16',
+    [string]$RC = 'rc3.17',
     [string]$CertificateProfile = 'HomeCinemaTV-FRESH',
     [string]$TvIp = '192.168.0.103',
     [switch]$Install,
@@ -63,6 +63,7 @@ if (-not $SkipLocalTests) {
                 'tools/rc314-audio-metadata-smoke.js',
                 'tools/rc315-skip-credits-smoke.js',
                 'tools/rc316-regression-smoke.js',
+                'tools/rc317-regression-smoke.js',
                 'tools/rc37-enhancements-smoke.js',
                 'tools/player-ux-rc37-smoke.js',
                 'tools/search-player-surface-smoke.js',
@@ -87,6 +88,7 @@ if (-not $SkipLocalTests) {
                 'tools/rc314-audio-metadata-smoke.js',
                 'tools/rc315-skip-credits-smoke.js',
                 'tools/rc316-regression-smoke.js',
+                'tools/rc317-regression-smoke.js',
                 'tools/rc37-enhancements-smoke.js',
                 'tools/player-ux-rc37-smoke.js',
                 'tools/search-player-surface-smoke.js',
@@ -172,7 +174,8 @@ Run-Step 'VERIFY WGT' {
             'css/rc39-cinematic-ui.css',
             'css/rc310-home-series.css',
             'css/rc315-skip-credits.css',
-            'css/rc316-regression-fixes.css'
+            'css/rc316-regression-fixes.css',
+            'css/rc317-regression-fixes.css'
         )) {
             if ($Entries -notcontains $Required) { Fail "WGT_MISSING_ENTRY=$Required" }
         }
@@ -194,6 +197,7 @@ Run-Step 'VERIFY WGT' {
         $Index = Read-ZipText 'index.html'
         if ($Index -notmatch 'js/rc315-skip-credits\.js' -or $Index -notmatch 'css/rc315-skip-credits\.css') { Fail 'WGT_RC315_LAYER_NOT_LOADED' }
         if ($Index -notmatch 'js/rc316-regression-fixes\.js' -or $Index -notmatch 'css/rc316-regression-fixes\.css') { Fail 'WGT_RC316_LAYER_NOT_LOADED' }
+        if ($Index -notmatch 'css/rc317-regression-fixes\.css') { Fail 'WGT_RC317_LAYER_NOT_LOADED' }
 
         $IconEntry = $Zip.Entries | Where-Object { $_.FullName -eq 'icon.png' } | Select-Object -First 1
         if (-not $IconEntry) { Fail 'WGT_ICON_MISSING' }
@@ -261,6 +265,11 @@ Run-Step 'VERIFY WGT' {
         foreach ($Marker in @('#playerTimelineButton:not(.scrubbing) #playerSeekPreview','#playerTimelineButton:not(.scrubbing) #playerScrubFill')) {
             if ($RC316Css -notmatch [regex]::Escape($Marker)) { Fail "WGT_RC316_CSS_MARKER_MISSING=$Marker" }
         }
+
+        $RC317Css = Read-ZipText 'css/rc317-regression-fixes.css'
+        foreach ($Marker in @('#subtitleText:empty','display:none!important','background:transparent!important')) {
+            if ($RC317Css -notmatch [regex]::Escape($Marker)) { Fail "WGT_RC317_CSS_MARKER_MISSING=$Marker" }
+        }
     } finally { $Zip.Dispose() }
 }
 
@@ -281,8 +290,10 @@ $Manifest = [ordered]@{
     seek_surface_fix = 'rc3.13+rc3.16-native-surface'
     audio_metadata = 'rc3.16-ffmpeg-fallback'
     skip_credits = 'rc3.15-chapter-markers'
-    title_priority = 'rc3.16-local-title-first'
-    regression_fixes = 'rc3.16'
+    title_priority = 'rc3.17-tmdb-ru-recognized-title'
+    subtitle_surface = 'rc3.17-empty-hidden'
+    continue_series = 'rc3.17-latest-activity-next-episode'
+    regression_fixes = 'rc3.17'
     built_utc = [DateTime]::UtcNow.ToString('o')
     installed = $false
 }
@@ -309,8 +320,10 @@ Write-Host "WGT_SHA256=$($Hash.Hash)"
 Write-Host 'SEEK_SURFACE_FIX=rc3.13+rc3.16-native-surface'
 Write-Host 'AUDIO_METADATA=rc3.16-ffmpeg-fallback'
 Write-Host 'SKIP_CREDITS=rc3.15-chapter-markers'
-Write-Host 'TITLE_PRIORITY=rc3.16-local-title-first'
-Write-Host 'REGRESSION_FIXES=rc3.16'
+Write-Host 'TITLE_PRIORITY=rc3.17-tmdb-ru-recognized-title'
+Write-Host 'SUBTITLE_SURFACE=rc3.17-empty-hidden'
+Write-Host 'CONTINUE_SERIES=rc3.17-latest-activity-next-episode'
+Write-Host 'REGRESSION_FIXES=rc3.17'
 Write-Host "MANIFEST=$ManifestTarget"
 Write-Host "TV_INSTALL=$([bool]$Install)"
 Write-Host '=============================================='
