@@ -1,0 +1,13 @@
+/* RC3.16: Tizen 4 can keep a composited seek preview/fill surface after seekTo.
+ * The temporary scrub UI is allowed to exist only while the timeline has the
+ * explicit scrubbing class. */
+#playerTimelineButton:not(.scrubbing) #playerSeekPreview{
+  display:none!important;
+  visibility:hidden!important;
+  opacity:0!important;
+}
+#playerTimelineButton:not(.scrubbing) #playerScrubFill{
+  width:0!important;
+  opacity:0!important;
+}
+#playerSeekPreview{pointer-events:none!important}
