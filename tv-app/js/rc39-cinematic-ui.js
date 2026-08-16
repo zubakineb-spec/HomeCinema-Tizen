@@ -16,6 +16,8 @@ function mappedImage(value){
   return map[value]||value;
 }
 function catalog(){return runtime.catalog||{movies:[],shows:[]}}
+function setHtml(el,html){if(el&&el.innerHTML!==html)el.innerHTML=html}
+function setText(el,value){if(el&&el.textContent!==value)el.textContent=value}
 function itemForCard(card){
   if(!card)return null;
   var id=Number(card.getAttribute('data-id')||0),type=card.getAttribute('data-card-type'),items=type==='show'?(catalog().shows||[]):(catalog().movies||[]);
@@ -33,7 +35,10 @@ function decorateCard(card){
   var item=itemForCard(card);if(!item)return;
   var thumb=$('.media-thumb',card);if(!thumb)return;
   var backdrop=mappedImage(item.backdrop_url||item.poster_url||'');
-  if(backdrop)thumb.style.backgroundImage="url('"+backdrop.replace(/'/g,"%27")+"')";
+  if(backdrop&&thumb.getAttribute('data-cin-backdrop')!==backdrop){
+    thumb.setAttribute('data-cin-backdrop',backdrop);
+    thumb.style.backgroundImage="url('"+backdrop.replace(/'/g,"%27")+"')";
+  }
   if(Number(item.rating||0)>0&&!$('.cin-card-rating',thumb)){
     var badge=document.createElement('span');badge.className='cin-card-rating';badge.textContent=Number(item.rating).toFixed(1);thumb.appendChild(badge);
   }
@@ -46,7 +51,7 @@ function heroMeta(item){
     if(item.year)parts.push('<span class="cin-meta-part">'+item.year+'</span>');
     if(item.genres)parts.push('<span class="cin-meta-part cin-meta-muted">'+text(item.genres)+'</span>');
     if(Number(item.season_count||0)>0)parts.push('<span class="cin-meta-part">'+Number(item.season_count)+' '+(Number(item.season_count)===1?'сезон':'сез.')+'</span>');
-    if(parts.length){meta.innerHTML=parts.join('');return}
+    if(parts.length){setHtml(meta,parts.join(''));return}
   }
   if($('.cin-meta-part,.cin-meta-rating',meta))return;
   var raw=text(meta.textContent);if(!raw)return;
@@ -57,14 +62,13 @@ function heroMeta(item){
     if(m)html.push('<span class="cin-meta-rating">'+m[1]+'</span>');
     else html.push('<span class="cin-meta-part">'+p+'</span>');
   }
-  if(html.length)meta.innerHTML=html.join('');
+  if(html.length)setHtml(meta,html.join(''));
 }
 function decorateHero(){heroMeta(focusedHeroItem())}
 function decorateHeadings(){
-  var movie=$('#movieSection h2'),show=$('#showSection h2'),cont=$('#continueSection h2');
-  if(movie)movie.textContent='Фильмы для вас';
-  if(show)show.textContent='Сериалы на основе вашей медиатеки';
-  if(cont)cont.textContent='Продолжить просмотр';
+  setText($('#movieSection h2'),'Фильмы для вас');
+  setText($('#showSection h2'),'Сериалы на основе вашей медиатеки');
+  setText($('#continueSection h2'),'Продолжить просмотр');
 }
 function decorate(){
   pending=false;
@@ -80,7 +84,7 @@ function schedule(){
 
 if(typeof MutationObserver==='function'){
   var observer=new MutationObserver(schedule);
-  observer.observe(document.body,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['class','style']});
+  observer.observe(document.body,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['class']});
 }
 
 document.addEventListener('focusin',function(e){if(e&&e.target&&e.target.classList&&e.target.classList.contains('media-card'))schedule()},true);
