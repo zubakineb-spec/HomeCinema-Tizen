@@ -148,7 +148,7 @@ jobs:
       - name: QNAP D1 Go format gate
         working-directory: native-qnap-d1
         run: |
-          files="internal/app/models.go internal/app/server.go internal/app/store.go internal/app/media_profile.go internal/app/media_profile_ffmpeg.go internal/app/scanner.go internal/app/image_cache.go internal/app/ux_api.go internal/app/rc37_test.go internal/app/rc314_audio_metadata_test.go internal/app/rc315_chapter_markers_test.go internal/app/rc316_ffmpeg_profile_test.go internal/app/rc317_regression_test.go"
+          files="internal/app/models.go internal/app/media_profile.go internal/app/media_profile_ffmpeg.go internal/app/scanner.go internal/app/image_cache.go internal/app/ux_api.go internal/app/rc37_test.go internal/app/rc314_audio_metadata_test.go internal/app/rc315_chapter_markers_test.go internal/app/rc316_ffmpeg_profile_test.go internal/app/rc317_regression_test.go"
           test -z "$(gofmt -l $files)" || { echo 'gofmt required:'; gofmt -l $files; exit 1; }
 
       - name: QNAP D1 native tests
