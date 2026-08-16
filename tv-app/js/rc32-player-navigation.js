@@ -8,12 +8,14 @@ var scrubDuration=0;
 var scrubOrigin=0;
 var scrubWasPlaying=false;
 var seekInFlight=false;
+var seekWatchdog=null;
 var SCRUB_STEP=10000;
 var SCRUB_STEP_MEDIUM=30000;
 var SCRUB_STEP_FAST=60000;
 var scrubHoldCount=0;
 var scrubHoldDirection=0;
 var nativeSetTimeout=window.setTimeout;
+var nativeClearTimeout=window.clearTimeout;
 
 function $(s,root){return (root||document).querySelector(s)}
 function $$(s,root){return Array.prototype.slice.call((root||document).querySelectorAll(s))}
@@ -52,6 +54,17 @@ function ensureScrubUi(){
   if(!preview){preview=document.createElement('div');preview.id='playerSeekPreview';preview.className='player-seek-preview';t.appendChild(preview)}
   return {timeline:t,fill:fill,preview:preview};
 }
+function clearSeekWatchdog(){
+  if(seekWatchdog!==null){try{nativeClearTimeout(seekWatchdog)}catch(_){}seekWatchdog=null}
+}
+function clearScrubVisuals(){
+  var ui=ensureScrubUi();if(!ui)return;
+  ui.timeline.classList.remove('scrubbing');
+  ui.fill.style.width='0%';
+  ui.preview.style.display='none';
+  ui.preview.style.left='0%';
+  ui.preview.textContent='';
+}
 function setHint(text){var hint=$('.player-hint');if(hint)hint.textContent=text}
 function focusTimeline(){
   var t=timeline();if(!t)return;
@@ -67,14 +80,10 @@ function focusControl(){
 function timelineFocused(){var t=timeline();return !!t&&(document.activeElement===t||t.classList.contains('focused'))}
 function resetInactivePlayerNavigation(){
   if(playerActive())return false;
-  scrubActive=false;scrubWasPlaying=false;seekInFlight=false;resetHold();
+  scrubActive=false;scrubWasPlaying=false;seekInFlight=false;clearSeekWatchdog();resetHold();
+  clearScrubVisuals();
   var t=timeline();
-  if(t){
-    t.classList.remove('focused');t.classList.remove('scrubbing');
-    var fill=$('#playerScrubFill',t),preview=$('#playerSeekPreview',t);
-    if(fill)fill.style.width='0%';
-    if(preview)preview.style.display='none';
-  }
+  if(t)t.classList.remove('focused');
   clearPlayerFocus();
   try{
     var active=document.activeElement;
@@ -85,8 +94,8 @@ function resetInactivePlayerNavigation(){
 }
 function hideScrubUi(delay){
   nativeSetTimeout(function(){
-    var ui=ensureScrubUi();if(!ui||scrubActive)return;
-    ui.timeline.classList.remove('scrubbing');ui.fill.style.width='0%';ui.preview.style.display='none';
+    if(scrubActive||seekInFlight)return;
+    clearScrubVisuals();
   },delay||0);
 }
 function renderScrub(step){
@@ -124,22 +133,31 @@ function commitScrub(immediateFeedback){
   if(!scrubActive||seekInFlight)return;
   var p=av(),target=Math.round(scrubTarget),label=formatTime(target),resume=scrubWasPlaying;
   scrubActive=false;seekInFlight=true;scrubWasPlaying=false;resetHold();
-  if(!p){seekInFlight=false;hideScrubUi(0);return}
+
+  /* RC3.13: clear the temporary seek surface immediately. On Tizen 4 the
+   * preview/fill can otherwise remain composited over AVPlay after seekTo(). */
+  clearScrubVisuals();
+
+  if(!p){seekInFlight=false;clearSeekWatchdog();return}
   var state=$('#playerStateText');if(state)state.textContent='Переход к '+label;
+  var settled=false;
   var done=function(){
-    if(!seekInFlight)return;
-    seekInFlight=false;
+    if(settled)return;
+    settled=true;clearSeekWatchdog();seekInFlight=false;clearScrubVisuals();
     if(resume&&playerActive()){try{if(p.getState()==='PAUSED')p.play()}catch(_){}}
     if(state&&playerActive())state.textContent=resume?'Воспроизведение':'Пауза';
     if(playerChromeVisible()&&!settingsOpen()&&timelineFocused())focusTimeline();
-    hideScrubUi(immediateFeedback?250:500);
   };
+
+  /* Some older AVPlay builds occasionally miss the seek callback. Never let
+   * seekInFlight or the seek overlay survive indefinitely. */
+  seekWatchdog=nativeSetTimeout(done,1800);
   try{p.seekTo(target,done,function(){done()})}catch(_){done()}
 }
 function cancelScrub(){
   if(!scrubActive)return;
   var p=av(),resume=scrubWasPlaying;
-  scrubActive=false;scrubWasPlaying=false;resetHold();hideScrubUi(0);
+  scrubActive=false;scrubWasPlaying=false;clearSeekWatchdog();resetHold();clearScrubVisuals();
   if(resume&&p&&playerActive()){try{if(p.getState()==='PAUSED')p.play()}catch(_){}}
   var state=$('#playerStateText');if(state&&playerActive())state.textContent=resume?'Воспроизведение':'Пауза';
 }
@@ -147,8 +165,10 @@ function cancelScrub(){
 window.setTimeout=function(fn,delay){
   var args=Array.prototype.slice.call(arguments,2);
   if(Number(delay)===7000&&typeof fn==='function'){
-    return nativeSetTimeout(function(){
-      if(timelineFocused()||scrubActive||seekInFlight)return;
+    return nativeSetTimeout(function waitForSeekToSettle(){
+      /* RC3.13: a focused-but-idle timeline must not suppress player chrome
+       * auto-hide forever. Only an active scrub/seek postpones the timer. */
+      if(scrubActive||seekInFlight){nativeSetTimeout(waitForSeekToSettle,350);return}
       fn.apply(window,args);
     },delay);
   }
