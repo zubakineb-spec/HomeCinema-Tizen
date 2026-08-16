@@ -55,6 +55,7 @@ if (-not $SkipLocalTests) {
                 'tools/player-exit-navigation-smoke.js',
                 'tools/root-back-exit-smoke.js',
                 'tools/rc311-series-back-smoke.js',
+                'tools/rc311-icon-smoke.js',
                 'tools/rc37-enhancements-smoke.js',
                 'tools/player-ux-rc37-smoke.js',
                 'tools/search-player-surface-smoke.js',
@@ -74,6 +75,7 @@ if (-not $SkipLocalTests) {
                 'tools/player-exit-navigation-smoke.js',
                 'tools/root-back-exit-smoke.js',
                 'tools/rc311-series-back-smoke.js',
+                'tools/rc311-icon-smoke.js',
                 'tools/rc37-enhancements-smoke.js',
                 'tools/player-ux-rc37-smoke.js',
                 'tools/search-player-surface-smoke.js',
@@ -99,6 +101,14 @@ if (-not $SkipLocalTests) {
     }
 }
 
+Run-Step 'NORMALIZE SAMSUNG PACKAGE ICON' {
+    $Normalizer = Join-Path $PSScriptRoot 'tools\NORMALIZE-TV-ICON.ps1'
+    $IconPath = Join-Path $PSScriptRoot 'tv-app\icon.png'
+    if (-not (Test-Path $Normalizer)) { Fail "ICON_NORMALIZER_MISSING=$Normalizer" }
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $Normalizer -IconPath $IconPath -CanvasSize 117 -ArtworkSize 92
+    if ($LASTEXITCODE -ne 0) { Fail "ICON_NORMALIZATION_FAILED=$LASTEXITCODE" }
+}
+
 Run-Step 'BUILD + SAMSUNG SIGN' {
     & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'BUILD-SAMSUNG-WGT.ps1') -CertificateProfile $CertificateProfile
     if ($LASTEXITCODE -ne 0) { Fail "BUILD_FAILED=$LASTEXITCODE" }
@@ -114,6 +124,7 @@ Run-Step 'COPY RELEASE TO DESKTOP' {
 
 Run-Step 'VERIFY WGT' {
     Add-Type -AssemblyName System.IO.Compression.FileSystem
+    Add-Type -AssemblyName System.Drawing
     $Zip = [System.IO.Compression.ZipFile]::OpenRead($Target)
     try {
         $Entries = @($Zip.Entries | ForEach-Object { $_.FullName })
@@ -122,6 +133,7 @@ Run-Step 'VERIFY WGT' {
             'author-signature.xml',
             'signature1.xml',
             'index.html',
+            'icon.png',
             'js/app.js',
             'js/rc-release.js',
             'js/rc32-player-navigation.js',
@@ -149,6 +161,20 @@ Run-Step 'VERIFY WGT' {
         $Config = Read-ZipText 'config.xml'
         $EscapedVersion = [regex]::Escape($Version)
         if ($Config -notmatch ('version="' + $EscapedVersion + '"')) { Fail 'WGT_VERSION_CHECK_FAILED' }
+
+        $IconEntry = $Zip.Entries | Where-Object { $_.FullName -eq 'icon.png' } | Select-Object -First 1
+        if (-not $IconEntry) { Fail 'WGT_ICON_MISSING' }
+        $IconStream = $IconEntry.Open()
+        $IconImage = $null
+        try {
+            $IconImage = [System.Drawing.Image]::FromStream($IconStream)
+            if ($IconImage.Width -ne 117 -or $IconImage.Height -ne 117) {
+                Fail "WGT_ICON_SIZE_INVALID=$($IconImage.Width)x$($IconImage.Height)"
+            }
+        } finally {
+            if ($IconImage) { $IconImage.Dispose() }
+            $IconStream.Dispose()
+        }
 
         $PlayerNav = Read-ZipText 'js/rc32-player-navigation.js'
         if ($PlayerNav -notmatch 'resetInactivePlayerNavigation') { Fail 'WGT_PLAYER_EXIT_NAVIGATION_FIX_MISSING' }
@@ -196,6 +222,8 @@ $Manifest = [ordered]@{
     size = $File.Length
     sha256 = $Hash.Hash
     certificate_profile = $CertificateProfile
+    icon_canvas = '117x117'
+    icon_artwork_max = '92x92'
     built_utc = [DateTime]::UtcNow.ToString('o')
     installed = $false
 }
@@ -219,6 +247,8 @@ Write-Host "SOURCE_SHA=$SourceSha"
 Write-Host "WGT=$Target"
 Write-Host "WGT_SIZE=$($File.Length)"
 Write-Host "WGT_SHA256=$($Hash.Hash)"
+Write-Host "ICON_CANVAS=117x117"
+Write-Host "ICON_ARTWORK_MAX=92x92"
 Write-Host "MANIFEST=$ManifestTarget"
 Write-Host "TV_INSTALL=$([bool]$Install)"
 Write-Host '=============================================='
