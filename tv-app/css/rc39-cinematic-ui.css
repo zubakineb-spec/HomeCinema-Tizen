@@ -1,0 +1,203 @@
+/* RC3.9 cinematic home-screen layer — presentation only. */
+html,body,#app{background:#050607}
+#app{font-family:Arial,Helvetica,sans-serif}
+
+#topbar{
+  height:78px;
+  padding:0 54px;
+  background:linear-gradient(180deg,rgba(4,5,7,.76) 0%,rgba(4,5,7,.28) 62%,rgba(4,5,7,0) 100%);
+  z-index:64;
+}
+.brand{width:300px;font-size:17px;letter-spacing:2.5px;color:#f5f5f6}
+.brand-icon{width:42px;height:42px;border-radius:10px;margin-right:13px}
+.nav-item{
+  font-size:17px;
+  padding:10px 15px;
+  margin-right:4px;
+  color:rgba(255,255,255,.67);
+  border-radius:9px;
+}
+.nav-item.active{color:#fff;background:rgba(255,255,255,.10)}
+.nav-item.focused{box-shadow:0 0 0 3px rgba(255,255,255,.92);background:rgba(255,255,255,.18)}
+#clock{font-size:16px;color:rgba(255,255,255,.70)}
+
+.hero{
+  height:720px;
+  background-color:#0a0b0e;
+  background-position:center 24%;
+  background-size:cover;
+}
+.hero-shade{
+  background:
+    linear-gradient(90deg,rgba(4,5,7,.98) 0%,rgba(4,5,7,.88) 22%,rgba(4,5,7,.58) 43%,rgba(4,5,7,.16) 67%,rgba(4,5,7,.05) 100%),
+    linear-gradient(0deg,#050607 0%,rgba(5,6,7,.88) 10%,rgba(5,6,7,.28) 36%,rgba(5,6,7,0) 62%);
+}
+.hero-content{left:66px;top:126px;width:900px}
+.hero .eyebrow{display:none}
+.hero h1{
+  font-family:Georgia,'Times New Roman',serif;
+  font-size:80px;
+  line-height:.98;
+  letter-spacing:-2.2px;
+  margin:0 0 20px;
+  max-width:940px;
+  text-shadow:0 4px 24px rgba(0,0,0,.70);
+}
+.hero-meta{
+  display:flex;
+  align-items:center;
+  min-height:36px;
+  margin:0 0 18px;
+  font-size:20px;
+  color:#fff;
+  white-space:nowrap;
+}
+.cin-meta-part{display:inline-block;margin-right:15px;color:#f4f4f5}
+.cin-meta-rating{
+  display:inline-block;
+  margin-right:14px;
+  padding:4px 8px 5px;
+  border-radius:4px;
+  background:#13bf4b;
+  color:#fff;
+  font-weight:800;
+  line-height:1;
+  min-width:48px;
+  text-align:center;
+}
+.cin-meta-muted{color:rgba(255,255,255,.75)}
+.hero p{
+  width:830px;
+  max-width:830px;
+  max-height:112px;
+  margin:0 0 23px;
+  font-size:25px;
+  line-height:1.34;
+  color:#f0f0f1;
+  text-shadow:0 2px 12px rgba(0,0,0,.70);
+}
+.hero-actions{margin-top:2px}
+.hero-actions button{
+  border-radius:8px;
+  padding:13px 23px;
+  font-size:18px;
+  background:rgba(255,255,255,.16);
+  color:#fff;
+  backdrop-filter:none;
+}
+.hero-actions .primary{background:#fff;color:#0a0b0d}
+.hero-actions button.focused{box-shadow:0 0 0 4px #fff,0 15px 36px rgba(0,0,0,.52)}
+
+.shelf-viewport{
+  top:648px;
+  height:432px;
+  z-index:26;
+  background:linear-gradient(0deg,#050607 0%,#050607 67%,rgba(5,6,7,.94) 81%,rgba(5,6,7,.48) 94%,rgba(5,6,7,0) 100%);
+}
+.shelves-track{height:432px}
+.shelf{height:432px;padding:8px 0 10px 67px}
+.shelf h2{
+  margin:0 0 10px 7px;
+  font-size:28px;
+  line-height:1.1;
+  font-weight:800;
+  text-shadow:0 2px 12px rgba(0,0,0,.72);
+}
+.rail{
+  width:1853px;
+  height:368px;
+  padding:8px 58px 34px 5px;
+  overflow:hidden;
+  white-space:nowrap;
+}
+.media-card,.continue-card{
+  position:relative;
+  width:420px;
+  min-width:420px;
+  margin:0 22px 0 0;
+  padding:0;
+  overflow:visible;
+  transform-origin:center center;
+}
+.media-thumb,.continue-thumb{
+  width:420px;
+  height:236px;
+  border-radius:6px;
+  background-color:#17191d;
+  background-position:center;
+  background-size:cover;
+  overflow:hidden;
+  transition:transform 120ms ease,box-shadow 120ms ease;
+}
+.media-thumb:after{
+  height:42%;
+  background:linear-gradient(transparent,rgba(0,0,0,.74));
+}
+.media-card.focused,.continue-card.focused{z-index:8}
+.media-card.focused .media-thumb,.continue-card.focused .continue-thumb{
+  transform:scale(1.035);
+  box-shadow:0 0 0 5px #fff,0 18px 42px rgba(0,0,0,.72);
+}
+.media-title{
+  margin:12px 2px 0;
+  font-size:20px;
+  line-height:1.15;
+  font-weight:800;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  color:#fff;
+}
+.media-meta{display:block;margin:5px 2px 0;font-size:14px;color:rgba(255,255,255,.58)}
+.kind{
+  left:auto;
+  right:10px;
+  bottom:10px;
+  border-radius:4px;
+  padding:5px 7px;
+  font-size:11px;
+  letter-spacing:.7px;
+  background:rgba(3,4,5,.64);
+  color:rgba(255,255,255,.90);
+}
+.cin-card-rating{
+  position:absolute;
+  z-index:5;
+  left:10px;
+  top:10px;
+  min-width:50px;
+  padding:5px 8px 6px;
+  border-radius:3px;
+  background:#14bf4b;
+  color:#fff;
+  font-size:18px;
+  line-height:1;
+  font-weight:900;
+  text-align:center;
+  box-shadow:0 2px 10px rgba(0,0,0,.35);
+}
+.continue-copy{left:18px;right:18px;bottom:16px;text-shadow:0 2px 8px rgba(0,0,0,.85)}
+.continue-title{font-size:21px}
+.continue-subtitle{font-size:14px;color:#f0f0f1}
+.continue-progress{height:4px;background:rgba(255,255,255,.34)}
+.continue-progress span{height:4px}
+
+.details-screen{background:#050607}
+.details-shade{
+  background:
+    linear-gradient(90deg,rgba(4,5,7,.98) 0%,rgba(4,5,7,.86) 27%,rgba(4,5,7,.44) 55%,rgba(4,5,7,.10) 78%,rgba(4,5,7,.03) 100%),
+    linear-gradient(0deg,#050607 0%,rgba(5,6,7,.66) 24%,rgba(5,6,7,0) 58%);
+}
+.details-content{padding:138px 70px 0;width:1040px}
+.details-title{font-family:Georgia,'Times New Roman',serif;font-size:72px;line-height:1;margin-bottom:18px;letter-spacing:-1.5px}
+.details-meta{font-size:20px;margin-bottom:18px}
+.details-overview{font-size:23px;line-height:1.38;width:820px;max-height:132px}
+.details-actions{margin-top:24px}
+.details-actions button{border-radius:8px;padding:14px 24px;font-size:18px}
+.series-area{top:620px;left:67px;height:460px}
+.episode-card{width:360px;min-width:360px}
+.episode-thumb{width:360px;height:203px;border-radius:6px}
+.episode-card.focused .episode-thumb{box-shadow:0 0 0 5px #fff,0 18px 42px rgba(0,0,0,.68)}
+
+/* Player and overlays intentionally keep their proven RC3.8 geometry. */
+.player,.player *{font-family:Arial,Helvetica,sans-serif}
