@@ -21,7 +21,6 @@ var nativeClearTimeout=window.clearTimeout;
 
 function $(s,root){return (root||document).querySelector(s)}
 function $$(s,root){return Array.prototype.slice.call((root||document).querySelectorAll(s))}
-function closest(el,selector){while(el&&el!==document){if(el.matches&&el.matches(selector))return el;el=el.parentElement}return null}
 function consume(e){try{e.preventDefault()}catch(_){}try{e.stopPropagation()}catch(_){}try{e.stopImmediatePropagation()}catch(_){}return false}
 function clamp(v,min,max){return Math.max(min,Math.min(max,v))}
 function player(){return $('#player')}
@@ -97,7 +96,7 @@ function begin(dir){
   clearHideTimer();
   chromeWasVisible=chromeVisible();
   wasPlaying=state==='PLAYING';
-  if(wasPlaying){try{p.pause()}catch(_){wasPlaying=false}}
+  if(wasPlaying){try{p.pause()}catch(_){return false}}
   active=true;direction=dir;origin=pos;duration=dur;
   target=clamp(origin+(dir*INITIAL_NUDGE_MS),0,Math.max(0,duration-500));
   holdStartedAt=Date.now();lastTickAt=holdStartedAt;
