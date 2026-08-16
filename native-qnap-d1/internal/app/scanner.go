@@ -37,6 +37,15 @@ func skipQNAPDir(name string) bool {
 	}
 }
 
+func reusableMediaProfile(profile MediaProfile) bool {
+	// RC3.14 added per-track audio metadata. A file probed by an older release can
+	// have audio codecs but no AudioTracks; force exactly one reprobe after upgrade.
+	if profile.Probed && len(profile.AudioCodecs) > 0 && len(profile.AudioTracks) == 0 {
+		return false
+	}
+	return true
+}
+
 func ScanLocal(cfg Config) ([]Movie, []Show, []Episode, error) {
 	movies, shows, episodes, _, err := ScanLocalIncremental(cfg, State{})
 	return movies, shows, episodes, err
@@ -88,11 +97,11 @@ func ScanLocalIncremental(cfg Config, previous State) ([]Movie, []Show, []Episod
 		profile := MediaProfile{}
 		reused := false
 		if parsed.Kind == "movie" {
-			if old, ok := oldMovies[src]; ok && old.FileSize == fileSize && old.FileMTime == fileMTime {
+			if old, ok := oldMovies[src]; ok && old.FileSize == fileSize && old.FileMTime == fileMTime && reusableMediaProfile(old.MediaProfile) {
 				profile = old.MediaProfile
 				reused = true
 			}
-		} else if old, ok := oldEpisodes[src]; ok && old.FileSize == fileSize && old.FileMTime == fileMTime {
+		} else if old, ok := oldEpisodes[src]; ok && old.FileSize == fileSize && old.FileMTime == fileMTime && reusableMediaProfile(old.MediaProfile) {
 			profile = old.MediaProfile
 			reused = true
 		}
