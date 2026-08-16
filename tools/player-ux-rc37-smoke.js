@@ -11,22 +11,25 @@ function main() {
   assert(source.includes('var SCRUB_STEP_MEDIUM=30000;'), 'medium hold speed must remain 30 seconds/sec');
   assert(source.includes('var SCRUB_STEP_FAST=60000;'), 'fast hold speed must remain 60 seconds/sec');
   assert(source.includes('var SCRUB_FRAME_MS=80;'), 'smooth timeline target must use its own 80ms visual clock');
-  assert(source.includes('var SCRUB_HOLD_DELAY=320;'), 'hold acceleration must start only after a short-tap window');
+  assert(source.includes('var SCRUB_INITIAL_RELEASE_MS=750;'), 'initial keydown must have a no-keyup release fallback');
+  assert(source.includes('var SCRUB_REPEAT_RELEASE_MS=360;'), 'held repeat stream must have a quiet-gap release fallback');
   assert(source.includes('if(scrubHoldCount>=11)return SCRUB_STEP_FAST;'), 'hold must accelerate to 60 seconds/sec');
   assert(source.includes('if(scrubHoldCount>=5)return SCRUB_STEP_MEDIUM;'), 'hold must accelerate to 30 seconds/sec');
   assert(source.includes('var delta=speed*SCRUB_FRAME_MS/1000;'), 'smooth target movement must scale speed by frame duration');
-  assert(source.includes('if(scrubKeyHeld&&scrubHoldDirection===direction)return true;'), 'Samsung repeated keydown events must not create extra timeline jumps');
+  assert(source.includes('if(!scrubRepeatSeen){scrubRepeatSeen=true;startSmoothMotion()}'), 'continuous motion must begin only after Samsung repeat confirms hold');
+  assert(source.includes('armReleaseFallback(SCRUB_INITIAL_RELEASE_MS);'), 'short tap fallback must be armed');
+  assert(source.includes('armReleaseFallback(SCRUB_REPEAT_RELEASE_MS);'), 'repeat-gap fallback must refresh while held');
   assert(source.includes("stepScrub(-1)"), 'left timeline scrub must use direction-aware smooth selection');
   assert(source.includes("stepScrub(1)"), 'right timeline scrub must use direction-aware smooth selection');
-  assert(source.includes('consume(e);clearHoldTimer();scrubKeyHeld=false;commitScrub(false);return false;'), 'keyup must stop smooth target movement and commit one seek');
+  assert(source.includes('consume(e);clearHoldTimer();clearReleaseTimer();scrubKeyHeld=false;commitScrub(false);return false;'), 'keyup must remain an immediate release path');
   assert((source.match(/p\.seekTo\(/g)||[]).length===1, 'timeline must have exactly one absolute seekTo commit');
   assert(!source.includes('jumpForward(')&&!source.includes('jumpBackward('), 'target selection must never jump AVPlay repeatedly');
   assert(source.includes('resetInactivePlayerNavigation'), 'player exit focus regression guard must remain');
 
-  console.log('PASS: Up/focused timeline retains 10-second short tap selection');
-  console.log('PASS: held Left/Right moves the visual target smoothly on an internal 80ms clock');
-  console.log('PASS: hold acceleration progresses 10 -> 30 -> 60 seconds/sec without Samsung key-repeat jumps');
-  console.log('PASS: keyup stops the target clock and commits exactly one seekTo');
+  console.log('PASS: Up/focused timeline retains 10-second short-tap selection');
+  console.log('PASS: Samsung repeat confirms hold; held Left/Right then moves the target on the internal 80ms clock');
+  console.log('PASS: release no longer depends on DOM keyup; repeat-stream silence also commits');
+  console.log('PASS: every scrub still has exactly one absolute seekTo');
   console.log('HOME_CINEMA_PLAYER_UX_RC37_SMOKE=PASS');
 }
 
