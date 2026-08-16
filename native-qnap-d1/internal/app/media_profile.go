@@ -12,15 +12,15 @@ import (
 )
 
 type profileProbeStream struct {
-	Index          int               `json:"index"`
-	CodecType      string            `json:"codec_type"`
-	CodecName      string            `json:"codec_name"`
-	Width          int               `json:"width"`
-	Height         int               `json:"height"`
-	ColorTransfer  string            `json:"color_transfer"`
-	Channels       int               `json:"channels"`
-	ChannelLayout  string            `json:"channel_layout"`
-	Tags           map[string]string `json:"tags"`
+	Index         int               `json:"index"`
+	CodecType     string            `json:"codec_type"`
+	CodecName     string            `json:"codec_name"`
+	Width         int               `json:"width"`
+	Height        int               `json:"height"`
+	ColorTransfer string            `json:"color_transfer"`
+	Channels      int               `json:"channels"`
+	ChannelLayout string            `json:"channel_layout"`
+	Tags          map[string]string `json:"tags"`
 }
 
 type profileProbeFormat struct {
