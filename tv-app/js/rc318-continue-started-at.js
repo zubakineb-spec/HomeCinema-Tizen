@@ -2,10 +2,8 @@
 'use strict';
 
 var previousFetch=window.fetch;
-var nativeFetch=window.HOME_CINEMA_NATIVE_FETCH;
 var startedAtBySource={};
 
-function apiBase(){return String(window.HOME_CINEMA_API||'').replace(/\/+$/,'')}
 function requestMethod(opts){return String(opts&&opts.method||'GET').toUpperCase()}
 function apiPath(input){
   if(typeof input!=='string')return '';
@@ -19,12 +17,7 @@ function progressSource(path){
 }
 function markPlaybackStarted(source){
   if(!source)return;
-  var started=Date.now();
-  startedAtBySource[source]=started;
-  if(typeof nativeFetch!=='function')return;
-  try{
-    nativeFetch.call(window,apiBase()+'/api/progress',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({source_url:source,position_ms:0,duration_ms:0,completed:0,started_at_ms:started})}).catch(function(){});
-  }catch(_){}
+  startedAtBySource[source]=Date.now();
 }
 function augmentProgressBody(opts){
   if(!opts||!opts.body)return opts;
