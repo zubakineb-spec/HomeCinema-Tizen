@@ -24,6 +24,22 @@ func progressPercent(p Progress) float64 {
 	return value
 }
 
+func preferredDisplayTitle(raw, recognized string) string {
+	if strings.TrimSpace(recognized) != "" {
+		return strings.TrimSpace(recognized)
+	}
+	return strings.TrimSpace(raw)
+}
+
+func showDisplayTitle(st State, showID int) (title, backdrop, poster string) {
+	for _, show := range st.Shows {
+		if show.ID == showID {
+			return preferredDisplayTitle(show.Title, show.RecognizedTitle), show.BackdropURL, show.PosterURL
+		}
+	}
+	return "", "", ""
+}
+
 func historyItems(st State, includeCompleted bool) []historyItem {
 	items := []historyItem{}
 	for _, p := range st.Progress {
@@ -38,7 +54,7 @@ func historyItems(st State, includeCompleted bool) []historyItem {
 				continue
 			}
 			items = append(items, historyItem{
-				"media_type": "movie", "id": m.ID, "title": m.Title,
+				"media_type": "movie", "id": m.ID, "title": preferredDisplayTitle(m.Title, m.RecognizedTitle),
 				"source_url": m.SourceURL, "image_url": m.PosterURL, "backdrop_url": m.BackdropURL,
 				"position_ms": p.PositionMS, "duration_ms": p.DurationMS, "updated_at": p.UpdatedAt,
 				"completed": p.Completed, "progress_percent": progressPercent(p),
@@ -49,13 +65,7 @@ func historyItems(st State, includeCompleted bool) []historyItem {
 			if episode.SourceURL != p.SourceURL {
 				continue
 			}
-			parent, backdrop, poster := "", "", ""
-			for _, show := range st.Shows {
-				if show.ID == episode.ShowID {
-					parent, backdrop, poster = show.Title, show.BackdropURL, show.PosterURL
-					break
-				}
-			}
+			parent, backdrop, poster := showDisplayTitle(st, episode.ShowID)
 			image := episode.StillURL
 			if image == "" {
 				image = backdrop
@@ -87,6 +97,101 @@ func historyItems(st State, includeCompleted bool) []historyItem {
 	return items
 }
 
+func sortedShowEpisodes(st State, showID int) []Episode {
+	episodes := []Episode{}
+	for _, ep := range st.Episodes {
+		if ep.ShowID == showID && !isExtra(ep) {
+			episodes = append(episodes, ep)
+		}
+	}
+	sort.Slice(episodes, func(i, j int) bool {
+		if episodes[i].Season == episodes[j].Season {
+			return episodes[i].Episode < episodes[j].Episode
+		}
+		return episodes[i].Season < episodes[j].Season
+	})
+	return episodes
+}
+
+func nextEpisodeAfter(st State, showID int, sourceURL string) *Episode {
+	episodes := sortedShowEpisodes(st, showID)
+	for i := range episodes {
+		if episodes[i].SourceURL == sourceURL && i+1 < len(episodes) {
+			next := episodes[i+1]
+			return &next
+		}
+	}
+	return nil
+}
+
+func continueItemForEpisode(st State, ep Episode, activityAt string) historyItem {
+	parent, backdrop, poster := showDisplayTitle(st, ep.ShowID)
+	image := ep.StillURL
+	if image == "" {
+		image = backdrop
+	}
+	if image == "" {
+		image = poster
+	}
+	item := historyItem{
+		"media_type": "episode", "id": ep.ID, "title": ep.Title, "parent_title": parent,
+		"source_url": ep.SourceURL, "image_url": image, "backdrop_url": backdrop,
+		"position_ms": int64(0), "duration_ms": int64(ep.Runtime) * 60 * 1000,
+		"updated_at": activityAt, "completed": 0, "progress_percent": float64(0),
+		"show_id": ep.ShowID, "season": ep.Season, "episode": ep.Episode,
+		"media_profile": ep.MediaProfile,
+	}
+	return item
+}
+
+// continueItems implements streaming-style series resume semantics. Only the most
+// recent activity for a show is considered. If that episode is unfinished, resume
+// it. If it is completed, continue from the immediately following episode instead
+// of resurfacing an older unfinished episode from the same series.
+func continueItems(st State) []historyItem {
+	all := historyItems(st, true)
+	out := []historyItem{}
+	seenShows := map[int]bool{}
+	for _, item := range all {
+		mediaType := fmt.Sprint(item["media_type"])
+		if mediaType == "episode" {
+			showID, _ := item["show_id"].(int)
+			if showID == 0 {
+				if n, ok := item["show_id"].(float64); ok {
+					showID = int(n)
+				}
+			}
+			if showID <= 0 || seenShows[showID] {
+				continue
+			}
+			seenShows[showID] = true
+			completed := fmt.Sprint(item["completed"]) == "1"
+			if !completed {
+				out = append(out, item)
+				continue
+			}
+			next := nextEpisodeAfter(st, showID, fmt.Sprint(item["source_url"]))
+			if next != nil {
+				out = append(out, continueItemForEpisode(st, *next, fmt.Sprint(item["updated_at"])))
+			}
+			continue
+		}
+		if mediaType == "movie" {
+			if fmt.Sprint(item["completed"]) != "1" {
+				out = append(out, item)
+			}
+			continue
+		}
+		if mediaType == "extra" && fmt.Sprint(item["completed"]) != "1" {
+			out = append(out, item)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return fmt.Sprint(out[i]["updated_at"]) > fmt.Sprint(out[j]["updated_at"])
+	})
+	return out
+}
+
 func (s *Server) history(w http.ResponseWriter, r *http.Request) {
 	items := historyItems(s.store.Snapshot(), true)
 	limit := 50
@@ -110,30 +215,13 @@ func (s *Server) nextEpisode(w http.ResponseWriter, r *http.Request) {
 		jsonOut(w, map[string]any{"item": nil})
 		return
 	}
-	episodes := []Episode{}
-	for _, episode := range st.Episodes {
-		if episode.ShowID == current.ShowID && !isExtra(episode) {
-			episodes = append(episodes, episode)
-		}
-	}
-	sort.Slice(episodes, func(i, j int) bool {
-		if episodes[i].Season == episodes[j].Season {
-			return episodes[i].Episode < episodes[j].Episode
-		}
-		return episodes[i].Season < episodes[j].Season
-	})
+	episodes := sortedShowEpisodes(st, current.ShowID)
 	for index := range episodes {
 		if episodes[index].SourceURL != source || index+1 >= len(episodes) {
 			continue
 		}
 		next := episodes[index+1]
-		showTitle := ""
-		for _, show := range st.Shows {
-			if show.ID == next.ShowID {
-				showTitle = show.Title
-				break
-			}
-		}
+		showTitle, _, _ := showDisplayTitle(st, next.ShowID)
 		p := st.Progress[next.SourceURL]
 		jsonOut(w, map[string]any{"item": map[string]any{
 			"id": next.ID, "show_id": next.ShowID, "parent_title": showTitle,
