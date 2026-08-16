@@ -1,26 +1,25 @@
 (function(){
 'use strict';
 
-/* RC3.22: retire the experimental RC3.21 direct-arrow scrubber.
+/* RC3.24: keep the retired RC3.21 compatibility layer inert.
  *
- * The proven timeline implementation already lives in rc32-player-navigation.js:
+ * The sole timeline implementation lives in rc32-player-navigation.js:
  *   Up -> timeline
- *   Left/Right -> select target position
- *   hold -> 10 / 30 / 60 second accelerated target steps
- *   keyup/OK -> exactly one absolute seekTo()
- *   Back -> cancel uncommitted target without stealing Back from app.js
+ *   Left/Right -> select target only
+ *   repeated keydown -> confirms hold
+ *   internal clock -> smooth accelerated target motion
+ *   keyup OR repeat stream silence -> exactly one absolute seekTo()
  *
- * Keep this compatibility file in the package so older release/package layouts
- * remain stable, but deliberately register no remote handlers and touch no AVPlay.
+ * No remote listeners or AVPlay calls are registered here.
  */
 var hint=null;
 try{hint=document.querySelector('.player-hint')}catch(_){}
-if(hint)hint.textContent='↑ — шкала времени · удерживать ←/→ — выбрать позицию · отпустить — перейти · Назад — меню / выход';
+if(hint)hint.textContent='↑ — шкала времени · удерживать ←/→ — выбрать позицию · отпустить — один переход · Назад — меню / выход';
 
 window.HOME_CINEMA_RC321={
-  marker:'rc3.22-rc321-retired',
+  marker:'rc3.24-rc321-retired',
   retired:true,
   owner:'rc32-player-navigation.js'
 };
-window.HOME_CINEMA_RC='rc3.22-restore-proven-scrub';
+window.HOME_CINEMA_RC='rc3.24-samsung-release-detection';
 })();
