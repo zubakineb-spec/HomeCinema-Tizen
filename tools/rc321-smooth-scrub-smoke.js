@@ -17,7 +17,7 @@ const rc319 = fs.readFileSync('tv-app/js/rc319-continue-recovery.js','utf8');
   'var FRAME_MS=50',
   'var INITIAL_NUDGE_MS=1500',
   'nativeSetInterval(tick,FRAME_MS)',
-  'target=clamp(target+(direction*speed*dt)',
+  'target=clamp(target+(direction*speed*dt/1000)',
   "if(delta>0&&typeof p.jumpForward==='function')",
   "if(delta<0&&typeof p.jumpBackward==='function')",
   "if(chromeVisible()&&!timelineFocused())return",
@@ -27,6 +27,9 @@ const rc319 = fs.readFileSync('tv-app/js/rc319-continue-recovery.js','utf8');
 
 if(smooth.includes('SCRUB_STEP=10000')||smooth.includes('target=origin+(dir*10000)')){
   fail('RC3.21 reintroduced fixed 10-second timeline jumps');
+}
+if(!smooth.includes('speed*dt/1000')){
+  fail('scrub speed must be scaled from milliseconds-per-second to the 50ms frame duration');
 }
 
 const ix321=index.indexOf('js/rc321-smooth-scrub.js');
@@ -76,6 +79,7 @@ if(api.speedFor(5000)!==60000)fail('long-hold scrub acceleration missing');
 if(typeof listeners.keydown!=='function'||typeof listeners.keyup!=='function')fail('remote key handlers not registered');
 
 console.log('PASS: Left/Right smooth scrub uses 50ms visual updates instead of fixed 10-second jumps');
+console.log('PASS: frame-time arithmetic is scaled correctly');
 console.log('PASS: hold acceleration progresses 4.5 -> 12 -> 30 -> 60 seconds per second');
 console.log('PASS: one AVPlay jump is committed on key release');
 console.log('PASS: RC3.19 Continue recovery remains intact');
