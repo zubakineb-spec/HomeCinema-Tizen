@@ -57,6 +57,7 @@ function makeRuntime(){
       disabled:false,
       matches:function(selector){
         if(selector==='.hidden')return this.classList.contains('hidden');
+        if(selector==='#playerControls .player-focusable')return this.classList.contains('player-focusable')&&this.parentElement&&this.parentElement.id==='playerControls';
         if(selector.charAt(0)==='#')return this.id===selector.slice(1);
         if(selector.charAt(0)==='.')return this.classList.contains(selector.slice(1));
         return false;
