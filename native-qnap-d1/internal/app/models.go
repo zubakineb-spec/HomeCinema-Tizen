@@ -88,11 +88,12 @@ type Episode struct {
 }
 
 type Progress struct {
-	SourceURL  string `json:"source_url"`
-	PositionMS int64  `json:"position_ms"`
-	DurationMS int64  `json:"duration_ms"`
-	Completed  int    `json:"completed"`
-	UpdatedAt  string `json:"updated_at"`
+	SourceURL   string `json:"source_url"`
+	PositionMS  int64  `json:"position_ms"`
+	DurationMS  int64  `json:"duration_ms"`
+	Completed   int    `json:"completed"`
+	StartedAtMS int64  `json:"started_at_ms,omitempty"`
+	UpdatedAt   string `json:"updated_at"`
 }
 
 type State struct {
