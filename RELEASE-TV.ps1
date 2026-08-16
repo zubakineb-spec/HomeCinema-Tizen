@@ -1,5 +1,5 @@
 param(
-    [string]$RC = 'rc3.12',
+    [string]$RC = 'rc3.14',
     [string]$CertificateProfile = 'HomeCinemaTV-FRESH',
     [string]$TvIp = '192.168.0.103',
     [switch]$Install,
@@ -49,6 +49,7 @@ if (-not $SkipLocalTests) {
                 'tv-app/js/rc38-search-surface.js',
                 'tv-app/js/rc39-cinematic-ui.js',
                 'tv-app/js/rc310-series-page.js',
+                'tv-app/js/rc314-audio-metadata.js',
                 'tools/player-state-smoke.js',
                 'tools/progress-consistency-smoke.js',
                 'tools/player-lifecycle-smoke.js',
@@ -56,6 +57,8 @@ if (-not $SkipLocalTests) {
                 'tools/root-back-exit-smoke.js',
                 'tools/rc311-series-back-smoke.js',
                 'tools/rc312-icon-smoke.js',
+                'tools/rc313-seek-surface-smoke.js',
+                'tools/rc314-audio-metadata-smoke.js',
                 'tools/rc37-enhancements-smoke.js',
                 'tools/player-ux-rc37-smoke.js',
                 'tools/search-player-surface-smoke.js',
@@ -76,6 +79,8 @@ if (-not $SkipLocalTests) {
                 'tools/root-back-exit-smoke.js',
                 'tools/rc311-series-back-smoke.js',
                 'tools/rc312-icon-smoke.js',
+                'tools/rc313-seek-surface-smoke.js',
+                'tools/rc314-audio-metadata-smoke.js',
                 'tools/rc37-enhancements-smoke.js',
                 'tools/player-ux-rc37-smoke.js',
                 'tools/search-player-surface-smoke.js',
@@ -147,12 +152,14 @@ Run-Step 'VERIFY WGT' {
             'index.html',
             'icon.png',
             'js/app.js',
+            'js/config.js',
             'js/rc-release.js',
             'js/rc32-player-navigation.js',
             'js/rc37-enhancements.js',
             'js/rc38-search-surface.js',
             'js/rc39-cinematic-ui.js',
             'js/rc310-series-page.js',
+            'js/rc314-audio-metadata.js',
             'css/rc37-enhancements.css',
             'css/rc39-cinematic-ui.css',
             'css/rc310-home-series.css'
@@ -170,9 +177,9 @@ Run-Step 'VERIFY WGT' {
             } finally { $Stream.Dispose() }
         }
 
-        $Config = Read-ZipText 'config.xml'
+        $ConfigXml = Read-ZipText 'config.xml'
         $EscapedVersion = [regex]::Escape($Version)
-        if ($Config -notmatch ('version="' + $EscapedVersion + '"')) { Fail 'WGT_VERSION_CHECK_FAILED' }
+        if ($ConfigXml -notmatch ('version="' + $EscapedVersion + '"')) { Fail 'WGT_VERSION_CHECK_FAILED' }
 
         $IconEntry = $Zip.Entries | Where-Object { $_.FullName -eq 'icon.png' } | Select-Object -First 1
         if (-not $IconEntry) { Fail 'WGT_ICON_MISSING' }
@@ -191,6 +198,7 @@ Run-Step 'VERIFY WGT' {
         $PlayerNav = Read-ZipText 'js/rc32-player-navigation.js'
         if ($PlayerNav -notmatch 'resetInactivePlayerNavigation') { Fail 'WGT_PLAYER_EXIT_NAVIGATION_FIX_MISSING' }
         if ($PlayerNav -notmatch 'SCRUB_STEP_MEDIUM=30000' -or $PlayerNav -notmatch 'SCRUB_STEP_FAST=60000') { Fail 'WGT_RC37_SCRUB_ACCELERATION_MISSING' }
+        if ($PlayerNav -notmatch 'function clearScrubVisuals\(\)' -or $PlayerNav -notmatch 'seekWatchdog=nativeSetTimeout\(done,1800\)') { Fail 'WGT_RC313_SEEK_SURFACE_FIX_MISSING' }
 
         $Release = Read-ZipText 'js/rc-release.js'
         if ($Release -notmatch 'getCurrentApplication\(\)\.exit\(\)') { Fail 'WGT_ROOT_BACK_EXIT_MISSING' }
@@ -220,6 +228,13 @@ Run-Step 'VERIFY WGT' {
         foreach ($Marker in @("rc3.10-series-page",'[data-card-type="show"]','/api/shows/','data-series310-season','data-play-source','playerVisible()')) {
             if ($SeriesPage -notmatch [regex]::Escape($Marker)) { Fail "WGT_RC310_SERIES_PAGE_MARKER_MISSING=$Marker" }
         }
+
+        $RouteConfig = Read-ZipText 'js/config.js'
+        if ($RouteConfig -notmatch 'js/rc314-audio-metadata\.js') { Fail 'WGT_RC314_AUDIO_LAYER_NOT_LOADED' }
+        $AudioMetadata = Read-ZipText 'js/rc314-audio-metadata.js'
+        foreach ($Marker in @('audio_tracks','HOME_CINEMA_AUDIO_PROFILES','details.join','channelLabel','codecLabel')) {
+            if ($AudioMetadata -notmatch [regex]::Escape($Marker)) { Fail "WGT_RC314_AUDIO_MARKER_MISSING=$Marker" }
+        }
     } finally { $Zip.Dispose() }
 }
 
@@ -237,6 +252,8 @@ $Manifest = [ordered]@{
     icon_canvas = '117x117'
     icon_tile = '110x62'
     icon_tile_aspect = '16:9'
+    seek_surface_fix = 'rc3.13'
+    audio_metadata = 'rc3.14-compact'
     built_utc = [DateTime]::UtcNow.ToString('o')
     installed = $false
 }
@@ -263,6 +280,8 @@ Write-Host "WGT_SHA256=$($Hash.Hash)"
 Write-Host "ICON_CANVAS=117x117"
 Write-Host "ICON_TILE=110x62"
 Write-Host "ICON_TILE_ASPECT=16:9"
+Write-Host 'SEEK_SURFACE_FIX=rc3.13'
+Write-Host 'AUDIO_METADATA=rc3.14-compact'
 Write-Host "MANIFEST=$ManifestTarget"
 Write-Host "TV_INSTALL=$([bool]$Install)"
 Write-Host '=============================================='
