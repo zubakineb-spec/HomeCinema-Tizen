@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.18 RC3.11 Back + Samsung icon hotfix - 2026-08-16
+
+- Fixed `Back` on the dedicated RC3.10 series page: the root application-exit guard now treats an open `series310Page` as a nested screen, so Back closes the series page instead of exiting Home Cinema.
+- Added `rc311-series-back-smoke.js` and extended the existing root-Back regression gate so player, details, search, About and the series browser all retain nested Back behavior.
+- Normalized the Tizen development package icon used by direct Tizen Studio installs: the required 117×117 canvas is preserved while the artwork is centered inside a 92×92 safe area with transparent padding so Home Cinema visually matches neighboring Samsung app icons.
+- Added `NORMALIZE-TV-ICON.ps1`, an RC3.11 icon regression gate and signed-WGT verification for the 117×117 package icon.
+- Updated `RELEASE-TV.ps1` default release candidate to `rc3.11` and made both Back and icon fixes mandatory before signing/installing.
+
 ## 0.3.18 RC3.10 compact home + series page - 2026-08-16
 
 - Reduced the cinematic Home hero height from the RC3.9 layout and pulled the content shelves upward so more of the library is visible without losing the backdrop-first look.
