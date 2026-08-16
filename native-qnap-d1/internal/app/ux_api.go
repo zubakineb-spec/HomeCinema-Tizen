@@ -57,6 +57,7 @@ func historyItems(st State, includeCompleted bool) []historyItem {
 				"media_type": "movie", "id": m.ID, "title": preferredDisplayTitle(m.Title, m.RecognizedTitle),
 				"source_url": m.SourceURL, "image_url": m.PosterURL, "backdrop_url": m.BackdropURL,
 				"position_ms": p.PositionMS, "duration_ms": p.DurationMS, "updated_at": p.UpdatedAt,
+				"started_at_ms": p.StartedAtMS,
 				"completed": p.Completed, "progress_percent": progressPercent(p),
 				"media_profile": m.MediaProfile,
 			})
@@ -81,6 +82,7 @@ func historyItems(st State, includeCompleted bool) []historyItem {
 				"media_type": mediaType, "id": episode.ID, "title": episode.Title, "parent_title": parent,
 				"source_url": episode.SourceURL, "image_url": image, "backdrop_url": backdrop,
 				"position_ms": p.PositionMS, "duration_ms": p.DurationMS, "updated_at": p.UpdatedAt,
+				"started_at_ms": p.StartedAtMS,
 				"completed": p.Completed, "show_id": episode.ShowID, "progress_percent": progressPercent(p),
 				"media_profile": episode.MediaProfile,
 			}
@@ -124,7 +126,31 @@ func nextEpisodeAfter(st State, showID int, sourceURL string) *Episode {
 	return nil
 }
 
-func continueItemForEpisode(st State, ep Episode, activityAt string) historyItem {
+func itemInt(item historyItem, key string) int {
+	switch value := item[key].(type) {
+	case int:
+		return value
+	case int64:
+		return int(value)
+	case float64:
+		return int(value)
+	}
+	return 0
+}
+
+func itemInt64(item historyItem, key string) int64 {
+	switch value := item[key].(type) {
+	case int:
+		return int64(value)
+	case int64:
+		return value
+	case float64:
+		return int64(value)
+	}
+	return 0
+}
+
+func continueItemForEpisode(st State, ep Episode, activityAt string, startedAtMS int64) historyItem {
 	parent, backdrop, poster := showDisplayTitle(st, ep.ShowID)
 	image := ep.StillURL
 	if image == "" {
@@ -137,55 +163,101 @@ func continueItemForEpisode(st State, ep Episode, activityAt string) historyItem
 		"media_type": "episode", "id": ep.ID, "title": ep.Title, "parent_title": parent,
 		"source_url": ep.SourceURL, "image_url": image, "backdrop_url": backdrop,
 		"position_ms": int64(0), "duration_ms": int64(ep.Runtime) * 60 * 1000,
-		"updated_at": activityAt, "completed": 0, "progress_percent": float64(0),
+		"updated_at": activityAt, "started_at_ms": startedAtMS,
+		"completed": 0, "progress_percent": float64(0),
 		"show_id": ep.ShowID, "season": ep.Season, "episode": ep.Episode,
 		"media_profile": ep.MediaProfile,
 	}
 	return item
 }
 
-// continueItems implements streaming-style series resume semantics. Only the most
-// recent activity for a show is considered. If that episode is unfinished, resume
-// it. If it is completed, continue from the immediately following episode instead
-// of resurfacing an older unfinished episode from the same series.
+// chooseShowContinueCandidate prefers the episode that was actually started most
+// recently. updated_at is deliberately not used for this decision because a late
+// autosave/final save from the previous episode can arrive after the next episode
+// has already begun. Legacy progress written before RC3.18 has no started_at_ms;
+// for those records the highest episode with progress is the safest sequential
+// migration rule.
+func chooseShowContinueCandidate(items []historyItem) historyItem {
+	var started historyItem
+	var startedMS int64
+	for _, item := range items {
+		value := itemInt64(item, "started_at_ms")
+		if value <= 0 {
+			continue
+		}
+		if started == nil || value > startedMS || (value == startedMS && fmt.Sprint(item["updated_at"]) > fmt.Sprint(started["updated_at"])) {
+			started = item
+			startedMS = value
+		}
+	}
+	if started != nil {
+		return started
+	}
+
+	var legacy historyItem
+	for _, item := range items {
+		if legacy == nil {
+			legacy = item
+			continue
+		}
+		season, episode := itemInt(item, "season"), itemInt(item, "episode")
+		legacySeason, legacyEpisode := itemInt(legacy, "season"), itemInt(legacy, "episode")
+		if season > legacySeason || (season == legacySeason && episode > legacyEpisode) ||
+			(season == legacySeason && episode == legacyEpisode && fmt.Sprint(item["updated_at"]) > fmt.Sprint(legacy["updated_at"])) {
+			legacy = item
+		}
+	}
+	return legacy
+}
+
+// continueItems implements streaming-style series resume semantics. RC3.18 uses
+// playback-start identity instead of save-arrival time. This prevents a delayed
+// save from episode 1 from replacing an already-started unfinished episode 2.
 func continueItems(st State) []historyItem {
 	all := historyItems(st, true)
 	out := []historyItem{}
-	seenShows := map[int]bool{}
+	showItems := map[int][]historyItem{}
+
 	for _, item := range all {
 		mediaType := fmt.Sprint(item["media_type"])
 		if mediaType == "episode" {
-			showID, _ := item["show_id"].(int)
-			if showID == 0 {
-				if n, ok := item["show_id"].(float64); ok {
-					showID = int(n)
-				}
-			}
-			if showID <= 0 || seenShows[showID] {
-				continue
-			}
-			seenShows[showID] = true
-			completed := fmt.Sprint(item["completed"]) == "1"
-			if !completed {
-				out = append(out, item)
-				continue
-			}
-			next := nextEpisodeAfter(st, showID, fmt.Sprint(item["source_url"]))
-			if next != nil {
-				out = append(out, continueItemForEpisode(st, *next, fmt.Sprint(item["updated_at"])))
+			showID := itemInt(item, "show_id")
+			if showID > 0 {
+				showItems[showID] = append(showItems[showID], item)
 			}
 			continue
 		}
 		if mediaType == "movie" {
-			if fmt.Sprint(item["completed"]) != "1" {
+			if itemInt(item, "completed") == 0 {
 				out = append(out, item)
 			}
 			continue
 		}
-		if mediaType == "extra" && fmt.Sprint(item["completed"]) != "1" {
+		if mediaType == "extra" && itemInt(item, "completed") == 0 {
 			out = append(out, item)
 		}
 	}
+
+	for showID, items := range showItems {
+		candidate := chooseShowContinueCandidate(items)
+		if candidate == nil {
+			continue
+		}
+		if itemInt(candidate, "completed") == 0 {
+			out = append(out, candidate)
+			continue
+		}
+		next := nextEpisodeAfter(st, showID, fmt.Sprint(candidate["source_url"]))
+		if next != nil {
+			out = append(out, continueItemForEpisode(
+				st,
+				*next,
+				fmt.Sprint(candidate["updated_at"]),
+				itemInt64(candidate, "started_at_ms"),
+			))
+		}
+	}
+
 	sort.Slice(out, func(i, j int) bool {
 		return fmt.Sprint(out[i]["updated_at"]) > fmt.Sprint(out[j]["updated_at"])
 	})
