@@ -1,6 +1,8 @@
 (function(){
 'use strict';
 
+window.HOME_CINEMA_RC='rc3.8-search-surface-fix';
+
 var overlay=document.getElementById('searchOverlay');
 var input=document.getElementById('searchInput');
 var player=document.getElementById('player');
