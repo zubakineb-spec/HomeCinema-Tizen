@@ -13,6 +13,7 @@ type AudioTrackProfile struct {
 }
 
 type MediaProfile struct {
+	ProfileVersion int                 `json:"profile_version,omitempty"`
 	Container      string              `json:"container,omitempty"`
 	VideoCodec     string              `json:"video_codec,omitempty"`
 	Width          int                 `json:"width,omitempty"`
@@ -21,6 +22,8 @@ type MediaProfile struct {
 	AudioCodecs    []string            `json:"audio_codecs,omitempty"`
 	AudioTracks    []AudioTrackProfile `json:"audio_tracks,omitempty"`
 	SubtitleCodecs []string            `json:"subtitle_codecs,omitempty"`
+	IntroEndMS     int64               `json:"intro_end_ms,omitempty"`
+	CreditsStartMS int64               `json:"credits_start_ms,omitempty"`
 	Compatibility  string              `json:"compatibility,omitempty"`
 	Reason         string              `json:"compatibility_reason,omitempty"`
 	Probed         bool                `json:"probed,omitempty"`
