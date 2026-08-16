@@ -1,5 +1,5 @@
 param(
-    [string]$RC = 'rc3.9',
+    [string]$RC = 'rc3.10',
     [string]$CertificateProfile = 'HomeCinemaTV-FRESH',
     [string]$TvIp = '192.168.0.103',
     [switch]$Install,
@@ -48,6 +48,7 @@ if (-not $SkipLocalTests) {
                 'tv-app/js/rc37-enhancements.js',
                 'tv-app/js/rc38-search-surface.js',
                 'tv-app/js/rc39-cinematic-ui.js',
+                'tv-app/js/rc310-series-page.js',
                 'tools/player-state-smoke.js',
                 'tools/progress-consistency-smoke.js',
                 'tools/player-lifecycle-smoke.js',
@@ -56,7 +57,8 @@ if (-not $SkipLocalTests) {
                 'tools/rc37-enhancements-smoke.js',
                 'tools/player-ux-rc37-smoke.js',
                 'tools/search-player-surface-smoke.js',
-                'tools/cinematic-ui-smoke.js'
+                'tools/cinematic-ui-smoke.js',
+                'tools/rc310-series-page-smoke.js'
             )
             foreach ($Rel in $JsFiles) {
                 $Path = Join-Path $PSScriptRoot $Rel
@@ -73,7 +75,8 @@ if (-not $SkipLocalTests) {
                 'tools/rc37-enhancements-smoke.js',
                 'tools/player-ux-rc37-smoke.js',
                 'tools/search-player-surface-smoke.js',
-                'tools/cinematic-ui-smoke.js'
+                'tools/cinematic-ui-smoke.js',
+                'tools/rc310-series-page-smoke.js'
             )) {
                 & node (Join-Path $PSScriptRoot $Smoke)
                 if ($LASTEXITCODE -ne 0) { Fail "SMOKE_FAILED=$Smoke" }
@@ -123,8 +126,10 @@ Run-Step 'VERIFY WGT' {
             'js/rc37-enhancements.js',
             'js/rc38-search-surface.js',
             'js/rc39-cinematic-ui.js',
+            'js/rc310-series-page.js',
             'css/rc37-enhancements.css',
-            'css/rc39-cinematic-ui.css'
+            'css/rc39-cinematic-ui.css',
+            'css/rc310-home-series.css'
         )) {
             if ($Entries -notcontains $Required) { Fail "WGT_MISSING_ENTRY=$Required" }
         }
@@ -164,9 +169,15 @@ Run-Step 'VERIFY WGT' {
         foreach ($Marker in @("rc3.9-cinematic-ui","item.backdrop_url||item.poster_url",'cin-card-rating','MutationObserver')) {
             if ($Cinematic -notmatch [regex]::Escape($Marker)) { Fail "WGT_RC39_CINEMATIC_MARKER_MISSING=$Marker" }
         }
-        $CinematicCss = Read-ZipText 'css/rc39-cinematic-ui.css'
-        foreach ($Marker in @('height:720px','width:420px','height:236px','.cin-card-rating','box-shadow:0 0 0 5px #fff')) {
-            if ($CinematicCss -notmatch [regex]::Escape($Marker)) { Fail "WGT_RC39_CINEMATIC_CSS_MARKER_MISSING=$Marker" }
+
+        $Compact = Read-ZipText 'css/rc310-home-series.css'
+        foreach ($Marker in @('height:610px','.hero-actions{display:none!important}','.media-title,.media-meta,.kind{display:none!important}','.series310-page','.series310-season-rail','.series310-episode-rail')) {
+            if ($Compact -notmatch [regex]::Escape($Marker)) { Fail "WGT_RC310_COMPACT_CSS_MARKER_MISSING=$Marker" }
+        }
+
+        $SeriesPage = Read-ZipText 'js/rc310-series-page.js'
+        foreach ($Marker in @("rc3.10-series-page",'[data-card-type="show"]','/api/shows/','data-series310-season','data-play-source','playerVisible()')) {
+            if ($SeriesPage -notmatch [regex]::Escape($Marker)) { Fail "WGT_RC310_SERIES_PAGE_MARKER_MISSING=$Marker" }
         }
     } finally { $Zip.Dispose() }
 }
