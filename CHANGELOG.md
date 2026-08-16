@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.18 RC3.9 cinematic UI - 2026-08-16
+
+- Reworked the Samsung home screen into a full-bleed cinematic layout inspired by modern streaming interfaces: large backdrop hero, oversized title, compact metadata line and content shelves overlapping the lower hero area.
+- Switched movie/show catalog cards to 420×236 landscape tiles and made cards prefer TMDB backdrop artwork over portrait posters.
+- Added green rating badges, white focus frames and a subtle scale-up state for the selected card.
+- Restyled hero metadata, descriptions, buttons, details view and episode cards while leaving the proven RC3.8 AVPlay/player geometry unchanged.
+- Added dynamic RC3.9 decoration so cards and hero metadata remain styled after catalog refreshes, focus changes and offline-cache restoration.
+- Added `cinematic-ui-smoke.js`, CI coverage and release-package verification for the new UI layer.
+
 ## 0.3.18 RC3.8 - 2026-08-16
 
 - Fixed a Samsung Tizen native-layer artifact where the focused search input could remain visible over AVPlay/details viewing.
