@@ -44,3 +44,22 @@ func TestRC314MediaLocalPath(t *testing.T) {
 		t.Fatal("foreign media host must be rejected")
 	}
 }
+
+func TestRC314LegacyAudioProfileForcesOneReprobe(t *testing.T) {
+	legacy := MediaProfile{Probed: true, AudioCodecs: []string{"ac3"}}
+	if reusableMediaProfile(legacy) {
+		t.Fatal("legacy profiled file without AudioTracks must be re-probed after RC3.14 upgrade")
+	}
+	current := MediaProfile{
+		Probed:      true,
+		AudioCodecs: []string{"ac3"},
+		AudioTracks: []AudioTrackProfile{{Codec: "ac3", Channels: 6}},
+	}
+	if !reusableMediaProfile(current) {
+		t.Fatal("RC3.14 profile with AudioTracks should remain reusable")
+	}
+	unprobed := MediaProfile{Probed: false}
+	if !reusableMediaProfile(unprobed) {
+		t.Fatal("extension-only profile should not be re-probed forever when ffprobe is unavailable")
+	}
+}
