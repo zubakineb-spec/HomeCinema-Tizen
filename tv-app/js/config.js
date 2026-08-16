@@ -1,5 +1,6 @@
 // Home Cinema Samsung TV target configuration.
 // AVPlay lifecycle is owned by app.js; this file only owns API endpoint routing.
+// RC3.14 audio UI is statically loaded by index.html before app.js: js/rc314-audio-metadata.js
 (function(){
   'use strict';
 
