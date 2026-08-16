@@ -7,25 +7,31 @@ var scrubTarget=0;
 var scrubDuration=0;
 var scrubOrigin=0;
 var scrubWasPlaying=false;
+var scrubPausedForHold=false;
 var seekInFlight=false;
 var seekWatchdog=null;
 
-/* RC3.23 keeps the proven interaction contract from RC3.4/RC3.5 but makes
- * target movement independent from Samsung key-repeat cadence:
+/* RC3.24: Samsung TV Web officially documents remote handling around keydown.
+ * Some physical TVs do not deliver a dependable DOM keyup for Smart Remote.
+ * Keep keyup as the fastest release signal, but never depend on it:
  *   Up -> focus timeline
- *   Left/Right -> choose target only
- *   hold -> smooth accelerated target movement
- *   keyup -> exactly one absolute seekTo()
+ *   Left/Right first keydown -> choose +/-10 sec target only
+ *   repeated keydown -> confirms a physical hold
+ *   internal 80ms clock -> smooth accelerated target movement
+ *   keyup OR repeat stream going quiet -> exactly one absolute seekTo()
  */
 var SCRUB_STEP=10000;
 var SCRUB_STEP_MEDIUM=30000;
 var SCRUB_STEP_FAST=60000;
 var SCRUB_FRAME_MS=80;
-var SCRUB_HOLD_DELAY=320;
+var SCRUB_INITIAL_RELEASE_MS=750;
+var SCRUB_REPEAT_RELEASE_MS=360;
 var scrubHoldCount=0;
 var scrubHoldDirection=0;
 var scrubHoldTimer=null;
+var scrubReleaseTimer=null;
 var scrubKeyHeld=false;
+var scrubRepeatSeen=false;
 
 var nativeSetTimeout=window.setTimeout;
 var nativeClearTimeout=window.clearTimeout;
@@ -55,11 +61,16 @@ function playbackReady(){
 function clearHoldTimer(){
   if(scrubHoldTimer!==null){try{nativeClearTimeout(scrubHoldTimer)}catch(_){}scrubHoldTimer=null}
 }
+function clearReleaseTimer(){
+  if(scrubReleaseTimer!==null){try{nativeClearTimeout(scrubReleaseTimer)}catch(_){}scrubReleaseTimer=null}
+}
 function resetHold(){
-  clearHoldTimer();
+  clearHoldTimer();clearReleaseTimer();
   scrubHoldCount=0;
   scrubHoldDirection=0;
   scrubKeyHeld=false;
+  scrubRepeatSeen=false;
+  scrubPausedForHold=false;
 }
 function holdStep(direction){
   if(scrubHoldDirection!==direction){scrubHoldDirection=direction;scrubHoldCount=0}
@@ -90,7 +101,7 @@ function setHint(text){var hint=$('.player-hint');if(hint)hint.textContent=text}
 function focusTimeline(){
   var t=timeline();if(!t)return;
   clearPlayerFocus();t.classList.add('focused');try{t.focus()}catch(_){}
-  setHint('←/→ — выбрать позицию · удерживать — плавно ускорить · отпустить — перейти · OK — сразу · ↓ — к кнопкам · Назад — отменить');
+  setHint('←/→ — выбрать позицию · удерживать — плавно ускорить · отпустить — один переход · ↓ — к кнопкам · Назад — отменить');
 }
 function focusControl(){
   var c=lastControl;
@@ -140,41 +151,68 @@ function beginScrub(){
   try{st=p.getState();pos=Number(p.getCurrentTime()||0);dur=Number(p.getDuration()||0)}catch(_){return false}
   if(!dur)return false;
   scrubWasPlaying=st==='PLAYING';
-  if(scrubWasPlaying){try{p.pause()}catch(_){scrubWasPlaying=false}}
+  scrubPausedForHold=false;
   scrubActive=true;scrubOrigin=pos;scrubTarget=pos;scrubDuration=dur;resetHold();
   renderScrub(0);return true;
 }
+function pauseForConfirmedHold(){
+  if(scrubPausedForHold||!scrubWasPlaying)return;
+  var p=av();if(!p)return;
+  try{if(p.getState()==='PLAYING'){p.pause();scrubPausedForHold=true}}catch(_){}
+}
 function smoothHoldTick(){
-  if(!scrubActive||!scrubKeyHeld||!scrubHoldDirection){clearHoldTimer();return}
+  if(!scrubActive||!scrubKeyHeld||!scrubHoldDirection||!scrubRepeatSeen){clearHoldTimer();return}
   var speed=holdStep(scrubHoldDirection);
   var delta=speed*SCRUB_FRAME_MS/1000;
   scrubTarget=clamp(scrubTarget+(scrubHoldDirection*delta),0,Math.max(0,scrubDuration-1000));
   renderScrub(speed);
   scrubHoldTimer=nativeSetTimeout(smoothHoldTick,SCRUB_FRAME_MS);
 }
-function startSmoothHold(direction){
+function startSmoothMotion(){
+  if(!scrubRepeatSeen)return;
+  pauseForConfirmedHold();
+  clearHoldTimer();
+  smoothHoldTick();
+}
+function armReleaseFallback(delay){
+  clearReleaseTimer();
+  scrubReleaseTimer=nativeSetTimeout(function(){
+    scrubReleaseTimer=null;
+    if(!scrubActive||!scrubKeyHeld)return;
+    clearHoldTimer();
+    scrubKeyHeld=false;
+    commitScrub(false);
+  },delay);
+}
+function handleScrubArrow(direction){
   if(!scrubActive&&!beginScrub())return false;
 
-  /* Samsung emits repeated keydown events at an uneven cadence. Ignore those
-   * repeats and let our own 80ms clock move the target smoothly. */
-  if(scrubKeyHeld&&scrubHoldDirection===direction)return true;
+  /* First keydown selects a single +/-10s target. Do not start continuous
+   * motion yet: without a dependable keyup, only a repeated keydown proves
+   * that the physical button is actually being held. */
+  if(!scrubKeyHeld||scrubHoldDirection!==direction){
+    clearHoldTimer();clearReleaseTimer();
+    scrubHoldCount=0;
+    scrubHoldDirection=direction;
+    scrubKeyHeld=true;
+    scrubRepeatSeen=false;
+    scrubTarget=clamp(scrubTarget+(direction*SCRUB_STEP),0,Math.max(0,scrubDuration-1000));
+    renderScrub(SCRUB_STEP);
+    armReleaseFallback(SCRUB_INITIAL_RELEASE_MS);
+    return true;
+  }
 
-  clearHoldTimer();
-  scrubHoldCount=0;
-  scrubHoldDirection=direction;
-  scrubKeyHeld=true;
-
-  /* Preserve the familiar short-press contract: one tap selects +/-10 sec.
-   * Holding then continues smoothly from that point. */
-  scrubTarget=clamp(scrubTarget+(direction*SCRUB_STEP),0,Math.max(0,scrubDuration-1000));
-  renderScrub(SCRUB_STEP);
-  scrubHoldTimer=nativeSetTimeout(smoothHoldTick,SCRUB_HOLD_DELAY);
+  /* Same-direction keydown while the key is already logically held is a
+   * Samsung repeat. Use it only to confirm/refresh the hold; target movement
+   * itself remains on our stable 80ms clock. */
+  if(!scrubRepeatSeen){scrubRepeatSeen=true;startSmoothMotion()}
+  armReleaseFallback(SCRUB_REPEAT_RELEASE_MS);
   return true;
 }
-function stepScrub(direction){return startSmoothHold(direction)}
+function stepScrub(direction){return handleScrubArrow(direction)}
 function commitScrub(immediateFeedback){
   if(!scrubActive||seekInFlight)return;
-  clearHoldTimer();
+  clearHoldTimer();clearReleaseTimer();
   var p=av(),target=Math.round(scrubTarget),label=formatTime(target),resume=scrubWasPlaying;
   scrubActive=false;seekInFlight=true;scrubWasPlaying=false;resetHold();
 
@@ -200,7 +238,7 @@ function commitScrub(immediateFeedback){
 }
 function cancelScrub(){
   if(!scrubActive)return;
-  clearHoldTimer();
+  clearHoldTimer();clearReleaseTimer();
   var p=av(),resume=scrubWasPlaying;
   scrubActive=false;scrubWasPlaying=false;clearSeekWatchdog();resetHold();clearScrubVisuals();
   if(resume&&p&&playerActive()){try{if(p.getState()==='PAUSED')p.play()}catch(_){}}
@@ -261,16 +299,18 @@ window.addEventListener('keyup',function(e){
   var code=Number(e.keyCode||e.which||0);
   if(!playerChromeVisible()||settingsOpen()||!timelineFocused()||!scrubActive)return;
   if(code!==37&&code!==39&&code!==412&&code!==417)return;
-  consume(e);clearHoldTimer();scrubKeyHeld=false;commitScrub(false);return false;
+  consume(e);clearHoldTimer();clearReleaseTimer();scrubKeyHeld=false;commitScrub(false);return false;
 },true);
 
-window.HOME_CINEMA_RC323={
-  marker:'rc3.23-smooth-timeline-hold',
+window.HOME_CINEMA_RC324={
+  marker:'rc3.24-samsung-release-detection',
   frameMs:SCRUB_FRAME_MS,
-  holdDelayMs:SCRUB_HOLD_DELAY,
+  initialReleaseMs:SCRUB_INITIAL_RELEASE_MS,
+  repeatReleaseMs:SCRUB_REPEAT_RELEASE_MS,
   tapStepMs:SCRUB_STEP,
   owner:'rc32-player-navigation.js',
-  commit:'keyup-one-seekTo'
+  holdConfirm:'repeated-keydown',
+  commit:'keyup-or-repeat-gap-one-seekTo'
 };
 
 ensureScrubUi();
