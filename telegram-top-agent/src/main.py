@@ -19,13 +19,15 @@ from bs4.element import NavigableString, Tag
 TOP_N = int(os.getenv("TOP_N", "25"))
 TZ_NAME = os.getenv("TZ_NAME", "Asia/Yekaterinburg")
 REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", "20"))
+WIKI_TIMEOUT = int(os.getenv("WIKI_TIMEOUT", "8"))
 USER_AGENT = os.getenv(
     "USER_AGENT",
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/151 Safari/537.36",
 )
 
-YEAR_RE = re.compile(r"\((19\d{2}|20\d{2})(?:-(?:19|20)\d{2})?\)")
+PAREN_YEAR_RE = re.compile(r"\((19\d{2}|20\d{2})(?:-(?:19|20)\d{2})?\)")
+ANY_YEAR_RE = re.compile(r"(?<!\d)(19\d{2}|20\d{2})(?!\d)")
 TECH_RE = re.compile(
     r"(?ix)\b(?:2160p|1080p|1080i|720p|480p|4k|uhd|hdr10\+?|dolby\s*vision|dv|"
     r"web[- .]?dl|web[- .]?rip|blu[- ]?ray|bdremux|bdrip|hdrip|dvdrip|hdtv|iptv|"
@@ -47,6 +49,7 @@ class Item:
     metric_name: str
     metric_value: int
     metric_display: str = ""
+    description: str = ""
     source_rank: int = 0
     aggregate_score: float = 0.0
     source_count: int = 1
@@ -63,14 +66,25 @@ def session() -> requests.Session:
     return s
 
 
+def response_text(r: requests.Response) -> str:
+    # Several Russian trackers still use Windows-1251. requests sometimes
+    # assumes ISO-8859-1, so prefer the page-declared/apparent encoding.
+    if not r.encoding or r.encoding.lower() in {"iso-8859-1", "ascii"}:
+        apparent = r.apparent_encoding
+        if apparent:
+            r.encoding = apparent
+    return r.text
+
+
 def fetch_first(urls: Iterable[str]) -> tuple[str, str]:
     s = session()
     errors: list[str] = []
     for url in urls:
         try:
             r = s.get(url, timeout=REQUEST_TIMEOUT, allow_redirects=True)
-            if r.status_code == 200 and len(r.text) > 500:
-                return r.text, r.url
+            text = response_text(r)
+            if r.status_code == 200 and len(text) > 500:
+                return text, r.url
             errors.append(f"{url}: HTTP {r.status_code}")
         except requests.RequestException as exc:
             errors.append(f"{url}: {type(exc).__name__}")
@@ -83,16 +97,23 @@ def clean_title(raw: str) -> str:
 
 
 def extract_year(title: str) -> int | None:
-    m = YEAR_RE.search(title)
+    m = ANY_YEAR_RE.search(title)
     return int(m.group(1)) if m else None
 
 
 def base_title(title: str) -> str:
     t = clean_title(title)
-    m = YEAR_RE.search(t)
+    m = PAREN_YEAR_RE.search(t)
     if m:
         t = t[:m.start()]
-    t = re.sub(r"\[[^\]]*(?:S\d|\d{1,2}[xх]\d|из\s+\d)[^\]]*\]", " ", t, flags=re.I)
+    # Release metadata in square brackets: season/episodes, years, codecs, genres.
+    t = re.sub(
+        r"\[[^\]]*(?:S\d|\d{1,2}[xх]\d|из\s+\d|19\d{2}|20\d{2}|1080|720|2160|BDRip|WEB)[^\]]*\]",
+        " ",
+        t,
+        flags=re.I,
+    )
+    t = re.sub(r"(?i)\b(?:сезон|season)\s*[:№#-]?\s*\d+\b.*$", " ", t)
     t = TECH_RE.sub(" ", t)
     return re.sub(r"\s+", " ", t).strip(" /-|,")
 
@@ -107,12 +128,34 @@ def looks_like_video(title: str) -> bool:
     if NON_VIDEO_RE.search(title):
         return False
     return bool(
-        YEAR_RE.search(title)
+        ANY_YEAR_RE.search(title)
         and (
             TECH_RE.search(title)
             or re.search(r"(?i)\b(?:film|movie|сезон|серии|series|season)\b", title)
         )
     )
+
+
+def shorten_description(text: str, max_chars: int = 280) -> str:
+    t = BeautifulSoup(html.unescape(text), "html.parser").get_text(" ", strip=True)
+    t = re.sub(r"\s+", " ", t).strip()
+    t = re.sub(r"\[[0-9]+\]", "", t)
+    if not t:
+        return ""
+    sentences = re.split(r"(?<=[.!?])\s+", t)
+    chosen = ""
+    for sentence in sentences[:3]:
+        candidate = (chosen + " " + sentence).strip()
+        if len(candidate) > max_chars:
+            break
+        chosen = candidate
+        if len(chosen) >= 120 and len(re.findall(r"[.!?]", chosen)) >= 2:
+            break
+    if not chosen:
+        chosen = t[:max_chars].rsplit(" ", 1)[0]
+    if len(chosen) < len(t) and not chosen.endswith((".", "!", "?", "…")):
+        chosen += "…"
+    return chosen
 
 
 def parse_peer_metric(cell) -> int | None:
@@ -130,7 +173,7 @@ def parse_rutor_category_table(table, kind: str) -> list[Item]:
         if len(cells) < 3:
             continue
         anchors = [clean_title(a.get_text(" ", strip=True)) for a in row.find_all("a")]
-        title_candidates = [x for x in anchors if YEAR_RE.search(x)]
+        title_candidates = [x for x in anchors if PAREN_YEAR_RE.search(x)]
         if not title_candidates:
             continue
         title = max(title_candidates, key=len)
@@ -217,8 +260,6 @@ def parse_nnm_peer_metric(text: str) -> int | None:
         values.append(int(down.group(1)))
     if values:
         return sum(values)
-
-    # NNM normally renders peer counters around arrows; tolerate whitespace and image-alt text.
     pair = re.search(
         r"Размер\s+[\d.,]+\s*(?:KB|MB|GB|TB).*?\|\s*(\d{1,6}).{0,80}?\|\s*(\d{1,6})",
         text,
@@ -229,13 +270,27 @@ def parse_nnm_peer_metric(text: str) -> int | None:
     return None
 
 
+def extract_nnm_description(text: str) -> str:
+    patterns = [
+        r"(?:Описание|О\s+фильме|О\s+сериале)\s*[:\-]?\s*(.*?)(?=(?:Качество|Видео|Аудио|Продолжительность|Размер|Доп\.?\s*информация|Релиз)\s*[:\-])",
+        r"(?:Сюжет)\s*[:\-]?\s*(.*?)(?=(?:Качество|Видео|Аудио|Продолжительность|Размер|Доп\.?\s*информация)\s*[:\-])",
+    ]
+    for pattern in patterns:
+        m = re.search(pattern, text, re.I | re.S)
+        if m:
+            candidate = shorten_description(m.group(1))
+            if len(candidate) >= 45:
+                return candidate
+    return ""
+
+
 def parse_nnm_category(url: str, kind: str, label: str) -> list[Item]:
     page, _ = fetch_first([url])
     soup = BeautifulSoup(page, "html.parser")
     items: list[Item] = []
     for heading in soup.find_all("h2"):
         title = clean_title(heading.get_text(" ", strip=True))
-        if not YEAR_RE.search(title) or not looks_like_video(title):
+        if not ANY_YEAR_RE.search(title) or not looks_like_video(title):
             continue
         block_text = nearby_text_after_heading(heading)
         metric = parse_nnm_peer_metric(block_text)
@@ -248,6 +303,7 @@ def parse_nnm_category(url: str, kind: str, label: str) -> list[Item]:
             source="NNM-Club",
             metric_name="активных пиров",
             metric_value=metric,
+            description=extract_nnm_description(block_text),
         ))
     print(f"NNM {label}: {len(items)} parsed", file=sys.stderr)
     return items
@@ -275,6 +331,107 @@ def parse_nnmclub() -> list[Item]:
     return dedupe_source(items)
 
 
+def decode_tapochek(r: requests.Response) -> str:
+    raw = r.content
+    for enc in ("cp1251", "windows-1251", "utf-8"):
+        try:
+            text = raw.decode(enc)
+            if "Tapochek" in text or "Торрент" in text or "Темы" in text:
+                return text
+        except UnicodeDecodeError:
+            pass
+    return raw.decode("cp1251", errors="replace")
+
+
+def parse_tapochek_metric(row_text: str) -> tuple[int, str] | None:
+    # Typical forum row around torrent stats:
+    # seeders | leechers 23.31 GB replies | views downloads dd-mm-yyyy
+    m = re.search(
+        r"(?<!\d)(\d{1,5})\s*\|\s*(\d{1,5})\s+"
+        r"[\d.,]+\s*(?:KB|MB|GB|TB)\s+"
+        r"\d{1,6}\s*\|\s*[\d\s]{1,10}\s+([\d\s]{1,10})\s+"
+        r"\d{2}-\d{2}-\d{4}",
+        row_text,
+        re.I,
+    )
+    if m:
+        downloads = int(re.sub(r"\D", "", m.group(3)))
+        if downloads > 0:
+            return downloads, "скачиваний"
+    # Fallback: active peers are still a valid current popularity signal.
+    p = re.search(
+        r"(?<!\d)(\d{1,5})\s*\|\s*(\d{1,5})\s+[\d.,]+\s*(?:KB|MB|GB|TB)",
+        row_text,
+        re.I,
+    )
+    if p:
+        peers = int(p.group(1)) + int(p.group(2))
+        if peers > 0:
+            return peers, "активных пиров"
+    return None
+
+
+def parse_tapochek_category(forum_id: int, kind: str, label: str) -> list[Item]:
+    s = session()
+    url = f"https://tapochek.net/viewforum.php?f={forum_id}"
+    r = s.get(url, timeout=REQUEST_TIMEOUT, allow_redirects=True)
+    if r.status_code != 200:
+        raise RuntimeError(f"HTTP {r.status_code}")
+    page = decode_tapochek(r)
+    if "login.php" in r.url.lower() and "viewforum" not in r.url.lower():
+        raise RuntimeError("login redirect")
+    soup = BeautifulSoup(page, "html.parser")
+    items: list[Item] = []
+    for row in soup.find_all("tr"):
+        links = [
+            a for a in row.find_all("a", href=True)
+            if re.search(r"viewtopic\.php\?(?:[^#]*&)?t=\d+", a.get("href", ""), re.I)
+        ]
+        if not links:
+            continue
+        titles = [clean_title(a.get_text(" ", strip=True)) for a in links]
+        titles = [t for t in titles if ANY_YEAR_RE.search(t) and len(t) >= 8]
+        if not titles:
+            continue
+        title = max(titles, key=len)
+        if NON_VIDEO_RE.search(title):
+            continue
+        metric = parse_tapochek_metric(clean_title(row.get_text(" ", strip=True)))
+        if not metric:
+            continue
+        metric_value, metric_name = metric
+        items.append(Item(
+            title=title,
+            year=extract_year(title),
+            kind=kind,
+            source="Tapochek",
+            metric_name=metric_name,
+            metric_value=metric_value,
+        ))
+    print(f"Tapochek {label}: {len(items)} parsed", file=sys.stderr)
+    return items
+
+
+def parse_tapochek() -> list[Item]:
+    categories = [
+        (74, "movie", "зарубежное кино"),
+        (75, "movie", "отечественное кино"),
+        (980, "series", "зарубежные сериалы"),
+        (981, "series", "русские сериалы"),
+    ]
+    items: list[Item] = []
+    failures = 0
+    for forum_id, kind, label in categories:
+        try:
+            items.extend(parse_tapochek_category(forum_id, kind, label))
+        except Exception as exc:
+            failures += 1
+            print(f"Tapochek {label} failed: {exc}", file=sys.stderr)
+    if not items:
+        raise RuntimeError(f"all Tapochek category parsers failed or returned 0 ({failures} failures)")
+    return dedupe_source(items)
+
+
 def parse_kinozal() -> list[Item]:
     page, _ = fetch_first([
         "https://kinozal.tv/top.php",
@@ -294,7 +451,7 @@ def parse_kinozal() -> list[Item]:
             if len(cells) < 2:
                 continue
             anchors = [clean_title(a.get_text(" ", strip=True)) for a in row.find_all("a")]
-            candidates = [x for x in anchors if YEAR_RE.search(x)]
+            candidates = [x for x in anchors if ANY_YEAR_RE.search(x)]
             if not candidates:
                 continue
             title = max(candidates, key=len)
@@ -317,15 +474,31 @@ def parse_kinozal() -> list[Item]:
     return dedupe_source(items)
 
 
+def item_key(item: Item) -> tuple[str, int | None, str]:
+    # A series is one work even when different seasons are released in different years.
+    # Movies keep the year to prevent remakes with identical titles from collapsing.
+    return (
+        canonical_title(item.title),
+        None if item.kind == "series" else item.year,
+        item.kind,
+    )
+
+
 def dedupe_source(items: list[Item]) -> list[Item]:
     best: dict[tuple[str, int | None, str], Item] = {}
     for item in items:
-        key = (canonical_title(item.title), item.year, item.kind)
+        key = item_key(item)
         if not key[0]:
             continue
         prev = best.get(key)
         if prev is None or item.metric_value > prev.metric_value:
+            if prev and not item.description:
+                item.description = prev.description
             best[key] = item
+        elif prev and not prev.description and item.description:
+            prev.description = item.description
+        if prev and item.kind == "series" and item.year and prev.year:
+            best[key].year = min(item.year, prev.year)
     return sorted(best.values(), key=lambda x: x.metric_value, reverse=True)[:300]
 
 
@@ -346,12 +519,16 @@ def rank_items(items: list[Item]) -> list[Item]:
 def same_work(a: Item, b: Item) -> bool:
     if a.kind != b.kind:
         return False
-    if a.year and b.year and abs(a.year - b.year) > 1:
-        return False
     ca, cb = canonical_title(a.title), canonical_title(b.title)
     if not ca or not cb:
         return False
-    return ca == cb or SequenceMatcher(None, ca, cb).ratio() >= 0.92
+    similarity = 1.0 if ca == cb else SequenceMatcher(None, ca, cb).ratio()
+    if a.kind == "series":
+        # Ignore release-year differences between seasons of the same series.
+        return similarity >= 0.90
+    if a.year and b.year and abs(a.year - b.year) > 1:
+        return False
+    return similarity >= 0.92
 
 
 def metric_note(item: Item) -> str:
@@ -370,16 +547,120 @@ def merge_sources(items: list[Item]) -> list[Item]:
         target.aggregate_score += item.aggregate_score * 0.85
         target.source_count += 1
         target.source_notes += f"; {metric_note(item)}"
-        if len(base_title(item.title)) < len(base_title(target.title)):
+        if not target.description and item.description:
+            target.description = item.description
+        if item.kind == "series":
+            years = [y for y in (target.year, item.year) if y]
+            if years:
+                target.year = min(years)
+        elif len(base_title(item.title)) < len(base_title(target.title)):
             target.title = item.title
             target.year = item.year or target.year
     return merged
 
 
-def safe_display_title(title: str) -> str:
-    t = base_title(title)
-    year = extract_year(title)
-    return f"{t} ({year})" if year else t
+def title_variants(title: str) -> list[str]:
+    base = base_title(title)
+    parts = [clean_title(x) for x in re.split(r"\s+/\s+|\s+\|\s+", base)]
+    out: list[str] = []
+    for part in [base, *parts]:
+        part = re.sub(r"[«»\"']", "", part).strip()
+        if len(part) >= 2 and part not in out:
+            out.append(part)
+    return out[:4]
+
+
+def wikipedia_description(item: Item) -> str:
+    variants = title_variants(item.title)
+    if not variants:
+        return ""
+    primary = variants[0]
+    media_word = "телесериал" if item.kind == "series" else "фильм"
+    query = f"{primary} {media_word}"
+    if item.kind == "movie" and item.year:
+        query += f" {item.year}"
+    try:
+        r = requests.get(
+            "https://ru.wikipedia.org/w/api.php",
+            params={
+                "action": "query",
+                "generator": "search",
+                "gsrsearch": query,
+                "gsrlimit": 4,
+                "prop": "extracts",
+                "exintro": 1,
+                "explaintext": 1,
+                "exsentences": 4,
+                "redirects": 1,
+                "format": "json",
+                "formatversion": 2,
+            },
+            headers={
+                "User-Agent": "FilmSeriesTopBot/1.0 (https://github.com/zubakineb-spec/HomeCinema-Tizen)",
+                "Accept-Language": "ru",
+            },
+            timeout=WIKI_TIMEOUT,
+        )
+        if r.status_code != 200:
+            return ""
+        pages = r.json().get("query", {}).get("pages", [])
+    except (requests.RequestException, ValueError):
+        return ""
+
+    canonical_variants = [canonical_title(v) for v in variants]
+    best_extract = ""
+    best_score = 0.0
+    for page in pages:
+        page_title = canonical_title(str(page.get("title", "")))
+        extract = clean_title(str(page.get("extract", "")))
+        if not page_title or len(extract) < 45:
+            continue
+        score = max((SequenceMatcher(None, v, page_title).ratio() for v in canonical_variants if v), default=0.0)
+        low = extract.lower()
+        if item.kind == "series" and ("сериал" in low or "телесериал" in low):
+            score += 0.12
+        if item.kind == "movie" and "фильм" in low:
+            score += 0.12
+        if item.year and str(item.year) in extract:
+            score += 0.08
+        if score > best_score:
+            best_score = score
+            best_extract = extract
+    if best_score < 0.52:
+        return ""
+    return shorten_description(best_extract)
+
+
+def enrich_descriptions(items: list[Item]) -> None:
+    selected = (
+        sorted((x for x in items if x.kind == "movie"), key=lambda x: x.aggregate_score, reverse=True)[:TOP_N]
+        + sorted((x for x in items if x.kind == "series"), key=lambda x: x.aggregate_score, reverse=True)[:TOP_N]
+    )
+    cache: dict[tuple[str, str], str] = {}
+    filled_from_source = sum(1 for x in selected if x.description)
+    wiki_filled = 0
+    for idx, item in enumerate(selected, 1):
+        if item.description:
+            item.description = shorten_description(item.description)
+            continue
+        key = (canonical_title(item.title), item.kind)
+        if key not in cache:
+            cache[key] = wikipedia_description(item)
+            if idx < len(selected):
+                time.sleep(0.08)
+        item.description = cache[key]
+        if item.description:
+            wiki_filled += 1
+    print(
+        f"Descriptions: source={filled_from_source}, wikipedia={wiki_filled}, "
+        f"missing={len(selected) - filled_from_source - wiki_filled}",
+        file=sys.stderr,
+    )
+
+
+def safe_display_title(item: Item) -> str:
+    t = base_title(item.title)
+    return f"{t} ({item.year})" if item.year else t
 
 
 def build_report(items: list[Item], errors: list[str]) -> str:
@@ -389,15 +670,16 @@ def build_report(items: list[Item], errors: list[str]) -> str:
 
     lines = [
         f"🎬 Торрент-популярность — {now:%d.%m.%Y}",
-        "Только названия и публичные показатели популярности. Без ссылок на раздачи.",
+        "Только названия, краткие описания и публичные показатели популярности. Без ссылок на раздачи.",
         "",
     ]
     if movies:
         lines.append(f"🔥 ФИЛЬМЫ — ТОП-{min(TOP_N, len(movies))}")
         for i, x in enumerate(movies, 1):
             multi = f" · {x.source_count} источника/релиза" if x.source_count > 1 else ""
-            lines.append(f"{i}. {safe_display_title(x.title)}{multi}")
-            lines.append(f"   {x.source_notes}")
+            lines.append(f"{i}. {safe_display_title(x)}{multi}")
+            lines.append(f"   📊 {x.source_notes}")
+            lines.append(f"   📝 {x.description or 'Краткое описание пока не найдено автоматически.'}")
     else:
         lines.extend(["🔥 ФИЛЬМЫ", "Нет достаточных публичных данных сегодня."])
 
@@ -406,8 +688,9 @@ def build_report(items: list[Item], errors: list[str]) -> str:
         lines.append(f"📺 СЕРИАЛЫ — ТОП-{min(TOP_N, len(series))}")
         for i, x in enumerate(series, 1):
             multi = f" · {x.source_count} источника/релиза" if x.source_count > 1 else ""
-            lines.append(f"{i}. {safe_display_title(x.title)}{multi}")
-            lines.append(f"   {x.source_notes}")
+            lines.append(f"{i}. {safe_display_title(x)}{multi}")
+            lines.append(f"   📊 {x.source_notes}")
+            lines.append(f"   📝 {x.description or 'Краткое описание пока не найдено автоматически.'}")
     else:
         lines.extend(["📺 СЕРИАЛЫ", "Нет достаточных публичных данных сегодня."])
 
@@ -467,6 +750,7 @@ def main() -> int:
     sources = [
         ("Rutor", parse_rutor),
         ("NNM-Club", parse_nnmclub),
+        ("Tapochek", parse_tapochek),
         ("Kinozal", parse_kinozal),
     ]
     for name, parser in sources:
@@ -482,6 +766,7 @@ def main() -> int:
 
     ranked = rank_items(all_items)
     merged = merge_sources(ranked)
+    enrich_descriptions(merged)
     report = build_report(merged, errors)
     print(report)
 
