@@ -31,11 +31,11 @@ type dohProvider struct {
 
 type dohResolver struct {
 	providers []dohProvider
-	// These historical static seeds belong to api.themoviedb.org only. They are
-	// intentionally never reused for image.tmdb.org because the CDN address set
-	// is independent and changes over time.
-	seeds   []string
-	timeout time.Duration
+	// API and image CDN use independent networks. Never reuse one host's seed
+	// addresses for the other host.
+	apiSeeds   []string
+	imageSeeds []string
+	timeout    time.Duration
 }
 
 type tmdbFallbackTransport struct {
@@ -77,8 +77,28 @@ func newDoHResolver() *dohResolver {
 			{name: "cloudflare", host: "cloudflare-dns.com", bootstrap: []string{"1.1.1.1", "1.0.0.1"}, path: "/dns-query"},
 			{name: "google", host: "dns.google", bootstrap: []string{"8.8.8.8", "8.8.4.4"}, path: "/resolve"},
 		},
-		seeds: []string{"3.170.19.94", "3.170.19.97", "3.170.19.104", "3.170.19.106", "54.230.253.60", "54.230.253.66", "54.230.253.88", "54.230.253.112"},
+		apiSeeds: []string{
+			"3.170.19.94", "3.170.19.97", "3.170.19.104", "3.170.19.106",
+			"54.230.253.60", "54.230.253.66", "54.230.253.88", "54.230.253.112",
+		},
+		// RC3.29: image.tmdb.org moved to BunnyCDN. This seed is only an
+		// emergency path when both system DNS and DoH are unavailable on the old
+		// QNAP. TLS still validates image.tmdb.org; verification is never disabled.
+		imageSeeds: []string{"143.244.60.196"},
 	}
+}
+
+func (r *dohResolver) seedIPsForHost(host string) []string {
+	if r == nil {
+		return nil
+	}
+	if strings.EqualFold(host, tmdbAPIHost) {
+		return publicIPv4List(r.apiSeeds)
+	}
+	if strings.EqualFold(host, tmdbImageHost) {
+		return publicIPv4List(r.imageSeeds)
+	}
+	return nil
 }
 
 func (r *dohResolver) ResolveA(ctx context.Context, host string) ([]string, error) {
@@ -95,14 +115,8 @@ func (r *dohResolver) ResolveA(ctx context.Context, host string) ([]string, erro
 			errs = append(errs, p.name+": "+err.Error())
 		}
 	}
-	// The bundled seeds were captured for api.themoviedb.org. Using them for
-	// image.tmdb.org would direct TLS to the wrong CDN and can produce exactly
-	// the missing-artwork symptom RC3.28 fixes.
-	if strings.EqualFold(host, tmdbAPIHost) {
-		seedIPs := publicIPv4List(r.seeds)
-		if len(seedIPs) > 0 {
-			return seedIPs, nil
-		}
+	if seedIPs := r.seedIPsForHost(host); len(seedIPs) > 0 {
+		return seedIPs, nil
 	}
 	if len(errs) == 0 {
 		return nil, fmt.Errorf("DoH returned no public IPv4 addresses for %s", host)
