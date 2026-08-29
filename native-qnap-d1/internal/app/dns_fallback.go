@@ -81,9 +81,11 @@ func newDoHResolver() *dohResolver {
 			"3.170.19.94", "3.170.19.97", "3.170.19.104", "3.170.19.106",
 			"54.230.253.60", "54.230.253.66", "54.230.253.88", "54.230.253.112",
 		},
-		// RC3.29/RC3.30: image.tmdb.org is served by BunnyCDN. The seed is an
-		// emergency path when DoH is unavailable on the old QNAP. RC3.30 also
-		// supplies current ISRG roots for this direct TLS connection.
+		// RC3.29/RC3.30: image.tmdb.org is served by BunnyCDN. The seed is a
+		// host-specific emergency path for the old QNAP. RC3.32 promotes it to
+		// first choice because hardware diagnostics proved 143.244.60.196:443 is
+		// reachable while DoH-selected CDN addresses can consume the full 20 s
+		// request budget before the known-good seed is ever attempted.
 		imageSeeds: []string{"143.244.60.196"},
 	}
 }
@@ -105,6 +107,19 @@ func (r *dohResolver) ResolveA(ctx context.Context, host string) ([]string, erro
 	if r == nil {
 		return nil, fmt.Errorf("DoH resolver is not configured")
 	}
+
+	// RC3.32: on the target QNAP the system resolver sinkholes image.tmdb.org,
+	// while live hardware diagnostics prove the host-specific BunnyCDN seed is
+	// directly reachable and presents the correct image.tmdb.org certificate.
+	// Prefer that known-good route before any DoH lookup. This prevents a valid
+	// but unreachable DoH-selected CDN address from consuming the client's full
+	// 20-second timeout. The TMDB API host keeps the existing DoH-first policy.
+	if strings.EqualFold(host, tmdbImageHost) {
+		if seedIPs := r.seedIPsForHost(host); len(seedIPs) > 0 {
+			return seedIPs, nil
+		}
+	}
+
 	var errs []string
 	for _, p := range r.providers {
 		ips, err := r.resolveProvider(ctx, p, host)
