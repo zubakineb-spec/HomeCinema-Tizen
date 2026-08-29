@@ -45,10 +45,6 @@ jobs:
           p = Path('src/main.py')
           s = p.read_text(encoding='utf-8')
 
-          # Public independent ranking source. It exposes two explicit homepage
-          # blocks: movies "ТОП торрентов - сейчас скачивают" and series
-          # "Лучшие сериалы - скачивают сейчас". No numeric counter is public,
-          # therefore the metric is ordinal rank, not an invented download count.
           injected = r'''
           def parse_rutrackerr_public() -> list[Item]:
               page, _ = fetch_first(["https://rutrackerr.ru/"])
@@ -68,12 +64,45 @@ jobs:
                           continue
                       if not isinstance(node, Tag) or node.name != "a":
                           continue
-                      title = clean_title(node.get_text(" ", strip=True))
-                      if not PAREN_YEAR_RE.search(title):
+                      raw_title = clean_title(node.get_text(" ", strip=True))
+                      if not PAREN_YEAR_RE.search(raw_title):
                           continue
                       href = str(node.get("href", ""))
-                      if not href or title.lower().startswith("скачать торрент"):
+                      if not href:
                           continue
+
+                      year = extract_year(raw_title)
+                      ru_title = re.sub(r"\s*\((?:19|20)\d{2}\)\s*$", "", raw_title).strip()
+
+                      # Read the metadata text belonging to this one card. The
+                      # homepage publicly exposes the original title, which is
+                      # valuable for matching the same work across sources.
+                      meta_parts: list[str] = []
+                      for nxt in node.next_elements:
+                          if nxt is node:
+                              continue
+                          if isinstance(nxt, Tag) and nxt.name == "a":
+                              candidate = clean_title(nxt.get_text(" ", strip=True))
+                              if candidate and PAREN_YEAR_RE.search(candidate):
+                                  break
+                          if isinstance(nxt, NavigableString):
+                              part = str(nxt)
+                              meta_parts.append(part)
+                              if "Дата добавления" in part:
+                                  break
+                      meta = clean_title(" ".join(meta_parts))
+                      original = ""
+                      m = re.search(
+                          r"Оригинальное\s+название:\s*(.*?)\s*(?=Страна:|Режиссер:|Режиссёр:|Жанр:|Актеры:|Актёры:|Дата\s+добавления:)",
+                          meta,
+                          re.I,
+                      )
+                      if m:
+                          original = clean_title(m.group(1))
+                      title = raw_title
+                      if original and canonical_title(original) != canonical_title(ru_title):
+                          title = f"{ru_title} / {original} ({year})" if year else f"{ru_title} / {original}"
+
                       key = canonical_title(title)
                       if not key or key in seen:
                           continue
@@ -81,7 +110,7 @@ jobs:
                       rank = len(items) + 1
                       items.append(Item(
                           title=title,
-                          year=extract_year(title),
+                          year=year,
                           kind=kind,
                           source="Rutrackerr.ru",
                           metric_name="место в публичном рейтинге",
@@ -111,7 +140,47 @@ jobs:
           s = s.replace('\ndef parse_kinozal()', injected + '\n\ndef parse_kinozal()', 1)
           s = s.replace('        ("Tapochek", parse_tapochek),', '        ("Rutrackerr.ru", parse_rutrackerr_public),')
 
-          # Wikipedia: remove disambiguation suffixes and demand high title match.
+          # Match bilingual tracker titles by aliases. Thus "Укрытие / Silo" and
+          # "Укрытие / Бункер / Silo" are one series, as are Russian-only vs
+          # bilingual variants when their English original title is known.
+          start = s.index('\ndef same_work(')
+          end = s.index('\ndef metric_note(', start)
+          same_work_impl = r'''
+          def work_aliases(title: str) -> list[str]:
+              parts = re.split(r"\s*/\s*|\s*\|\s*", base_title(title))
+              aliases: list[str] = []
+              for part in parts:
+                  c = canonical_title(part)
+                  if c and c not in aliases:
+                      aliases.append(c)
+              full = canonical_title(title)
+              if full and full not in aliases:
+                  aliases.append(full)
+              return aliases
+
+
+          def same_work(a: Item, b: Item) -> bool:
+              if a.kind != b.kind:
+                  return False
+              if a.kind == "movie" and a.year and b.year and abs(a.year - b.year) > 1:
+                  return False
+              aa, bb = work_aliases(a.title), work_aliases(b.title)
+              if not aa or not bb:
+                  return False
+              if set(aa) & set(bb):
+                  return True
+              threshold = 0.90 if a.kind == "series" else 0.92
+              return max(SequenceMatcher(None, x, y).ratio() for x in aa for y in bb) >= threshold
+          '''
+          s = s[:start] + same_work_impl + s[end:]
+
+          # Wikipedia enrichment: with bilingual titles query by the last alias
+          # (normally the original/English title), then reject ambiguous/list or
+          # non-film results rather than risk attaching a wrong synopsis.
+          s = s.replace(
+              'primary = variants[0]',
+              'primary = variants[-1] if len(variants) > 1 else variants[0]'
+          )
           s = s.replace(
               'page_title = canonical_title(str(page.get("title", "")))',
               'page_title = canonical_title(re.sub(r"\\s*\\([^)]*\\)\\s*$", "", str(page.get("title", ""))))'
@@ -124,7 +193,12 @@ jobs:
           new_return = '''if best_score < 0.98:
               return ""
           low_best = best_extract.lower()
-          if any(x in low_best for x in ("название фильмов", "список и описание эпизодов", "список эпизодов")):
+          bad_markers = (
+              "название фильмов", "может означать", "может иметь следующие значения",
+              "список и описание эпизодов", "список эпизодов",
+              "саундтрек-альбом", "саундтрек альбом", "soundtrack album",
+          )
+          if any(x in low_best for x in bad_markers):
               return ""
           if item.kind == "movie" and item.year:
               years = [int(y) for y in ANY_YEAR_RE.findall(best_extract)]
