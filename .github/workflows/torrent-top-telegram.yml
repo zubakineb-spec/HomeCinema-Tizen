@@ -2,6 +2,10 @@ name: Telegram Torrent Top 25
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/torrent-top-telegram.yml"
+      - "telegram-top-agent/**"
   schedule:
     # 18:00 Asia/Yekaterinburg (UTC+5) = 13:00 UTC.
     # GitHub scheduled runs may start a few minutes later under load.
