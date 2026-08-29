@@ -12,9 +12,13 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
-const maxCachedImageBytes = 20 << 20
+const (
+	maxCachedImageBytes     = 20 << 20
+	tmdbImageRequestTimeout = 60 * time.Second
+)
 
 func cacheImageExtension(u *url.URL) string {
 	ext := strings.ToLower(filepath.Ext(u.Path))
@@ -81,15 +85,20 @@ func serveCachedImage(w http.ResponseWriter, r *http.Request, path string) bool 
 	return true
 }
 
-// RC3.28: artwork downloads must use the same TMDB client as metadata calls.
-// QNAP D1 installations can have broken/filtered system DNS while the explicit
-// DoH/direct-host fallback still works. A plain http.Client here bypassed that
-// fallback and caused catalog items to have valid poster URLs but blank artwork.
+// RC3.28: artwork downloads must use the same verified TMDB transport as
+// metadata calls so QNAP DNS/TLS fallbacks stay active. RC3.33 keeps that
+// transport but gives artwork its own longer whole-request budget because
+// http.Client.Timeout includes response-body reads. Metadata remains at the
+// original 20-second budget.
 func (s *Server) tmdbImageHTTPClient() *http.Client {
 	if s != nil && s.tmdb != nil && s.tmdb.client != nil {
-		return s.tmdb.client
+		clone := *s.tmdb.client
+		clone.Timeout = tmdbImageRequestTimeout
+		return &clone
 	}
-	return newTMDBHTTPClient()
+	client := newTMDBHTTPClient()
+	client.Timeout = tmdbImageRequestTimeout
+	return client
 }
 
 func (s *Server) imageCache(w http.ResponseWriter, r *http.Request) {
@@ -135,7 +144,18 @@ func (s *Server) imageCache(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	data, err := io.ReadAll(io.LimitReader(resp.Body, maxCachedImageBytes+1))
-	if err != nil || len(data) > maxCachedImageBytes {
+	if err != nil {
+		// RC3.33: the physical QNAP proved that DNS, SNI and certificate
+		// verification can succeed while the old 20-second whole-client timeout
+		// expires during body reading. Persist the exact read failure and number of
+		// bytes already received so a future network failure is unambiguous.
+		readErr := fmt.Errorf("TMDB image body read failed after %d bytes (content_length=%d): %w", len(data), resp.ContentLength, err)
+		log.Printf("%v", readErr)
+		s.recordTMDBImageTransportFailure(u, readErr)
+		jsonErr(w, http.StatusBadGateway, "TMDB image read failed")
+		return
+	}
+	if len(data) > maxCachedImageBytes {
 		jsonErr(w, http.StatusBadGateway, "TMDB image read failed")
 		return
 	}
