@@ -11,7 +11,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 )
 
 const maxCachedImageBytes = 20 << 20
@@ -31,7 +30,7 @@ func validateTMDBImageURL(raw string) (*url.URL, error) {
 	if err != nil || u.Scheme != "https" {
 		return nil, fmt.Errorf("invalid image URL")
 	}
-	if !strings.EqualFold(u.Hostname(), "image.tmdb.org") {
+	if !strings.EqualFold(u.Hostname(), tmdbImageHost) {
 		return nil, fmt.Errorf("unsupported image host")
 	}
 	return u, nil
@@ -56,6 +55,17 @@ func serveCachedImage(w http.ResponseWriter, r *http.Request, path string) bool 
 	return true
 }
 
+// RC3.28: artwork downloads must use the same TMDB client as metadata calls.
+// QNAP D1 installations can have broken/filtered system DNS while the explicit
+// DoH/direct-host fallback still works. A plain http.Client here bypassed that
+// fallback and caused catalog items to have valid poster URLs but blank artwork.
+func (s *Server) tmdbImageHTTPClient() *http.Client {
+	if s != nil && s.tmdb != nil && s.tmdb.client != nil {
+		return s.tmdb.client
+	}
+	return newTMDBHTTPClient()
+}
+
 func (s *Server) imageCache(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		jsonErr(w, http.StatusMethodNotAllowed, "GET required")
@@ -76,7 +86,7 @@ func (s *Server) imageCache(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	client := &http.Client{Timeout: 15 * time.Second}
+	client := s.tmdbImageHTTPClient()
 	req, _ := http.NewRequest(http.MethodGet, u.String(), nil)
 	req.Header.Set("User-Agent", "HomeCinema/0.3.18 QNAP-D1")
 	resp, err := client.Do(req)
