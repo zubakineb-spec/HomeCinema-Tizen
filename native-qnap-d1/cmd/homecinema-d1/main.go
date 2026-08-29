@@ -29,7 +29,8 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Printf("Home Cinema D1 %s listening on %s; media=%s", app.Version, cfg.Listen, cfg.MediaRoot)
+	app.StartAutoLibrarySync(srv, cfg)
+	log.Printf("Home Cinema D1 %s listening on %s; media=%s; auto_scan=%ds", app.Version, cfg.Listen, cfg.MediaRoot, cfg.AutoScanSeconds)
 	if err := srv.ListenAndServe(); err != nil {
 		log.Printf("server stopped: %v", err)
 		os.Exit(1)
