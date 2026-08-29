@@ -25,6 +25,10 @@ func scanLibraryOnce(s *Server) (ScanStats, error) {
 	}
 	if s.tmdb.enabled() {
 		s.enrich()
+		repaired := s.repairMissingArtwork()
+		if repaired["movies_repaired"] > 0 || repaired["shows_repaired"] > 0 {
+			log.Printf("library artwork repaired: movies=%d shows=%d", repaired["movies_repaired"], repaired["shows_repaired"])
+		}
 	}
 	return stats, nil
 }
