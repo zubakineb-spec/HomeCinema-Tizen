@@ -117,10 +117,11 @@ func (s *Server) imageCache(w http.ResponseWriter, r *http.Request) {
 	req.Header.Set("User-Agent", "HomeCinema/0.3.18 QNAP-D1")
 	resp, err := client.Do(req)
 	if err != nil {
-		// RC3.31: keep the HTTP surface stable but retain the complete transport
-		// error in the NAS log. This makes DNS, x509 and direct-fallback failures
-		// distinguishable without exposing internals to the TV client.
+		// RC3.31 keeps the complete error on the standard logger. RC3.32 also
+		// persists it independently in the data directory because the target QNAP
+		// proved that later standard-log lines can be unobservable after startup.
 		log.Printf("TMDB image fetch failed host=%s path=%s: %v", u.Hostname(), u.EscapedPath(), err)
+		s.recordTMDBImageTransportFailure(u, err)
 		jsonErr(w, http.StatusBadGateway, "TMDB image unavailable")
 		return
 	}
