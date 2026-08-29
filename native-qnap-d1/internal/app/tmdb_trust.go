@@ -63,9 +63,10 @@ func newTMDBImageRootPool() *x509.CertPool {
 	if err != nil || pool == nil {
 		pool = x509.NewCertPool()
 	}
-	// The constant is compiled into the binary. AppendCertsFromPEM can only
-	// return false if the embedded certificate data is corrupt; tests gate this.
+	// X1/X2 keep compatibility with the classic chain; RC3.31 adds the
+	// Generation Y roots required by 2026 Let's Encrypt issuance on old QTS.
 	_ = pool.AppendCertsFromPEM([]byte(tmdbImageExtraRootsPEM))
+	_ = appendTMDBGenerationYRoots(pool)
 	return pool
 }
 
