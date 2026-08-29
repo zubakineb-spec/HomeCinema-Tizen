@@ -39,13 +39,48 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Tighten category parser
+      - name: Runtime compatibility and quality patches
         run: |
           python - <<'PY'
           from pathlib import Path
           p = Path('src/main.py')
           s = p.read_text(encoding='utf-8')
-          s = s.replace('soup.find_all(["h1", "h2", "h3", "div", "td"])', 'soup.find_all(["h1", "h2", "h3"])')
+
+          # Tapochek currently presents a certificate chain that GitHub-hosted
+          # runners cannot validate. Disable verification ONLY for its public,
+          # read-only category requests; no credentials or secrets are sent.
+          old = '''url = f"https://tapochek.net/viewforum.php?f={forum_id}"
+              r = s.get(url, timeout=REQUEST_TIMEOUT, allow_redirects=True)
+              if r.status_code != 200:'''
+          new = '''url = f"https://tapochek.net/viewforum.php?f={forum_id}"
+              r = s.get(url, timeout=REQUEST_TIMEOUT, allow_redirects=True, verify=False)
+              if r.status_code != 200:'''
+          s = s.replace(old, new)
+
+          # Wikipedia: strip disambiguation suffixes from page titles before
+          # matching and require an almost exact title/alias match.
+          s = s.replace(
+              'page_title = canonical_title(str(page.get("title", "")))',
+              'page_title = canonical_title(re.sub(r"\\s*\\([^)]*\\)\\s*$", "", str(page.get("title", ""))))'
+          )
+          s = s.replace('if best_score < 0.52:', 'if best_score < 0.98:')
+
+          # Reject obvious disambiguation/list pages and wrong-year film pages.
+          old_return = '''if best_score < 0.98:
+              return ""
+          return shorten_description(best_extract)'''
+          new_return = '''if best_score < 0.98:
+              return ""
+          low_best = best_extract.lower()
+          if any(x in low_best for x in ("название фильмов", "список и описание эпизодов", "список эпизодов")):
+              return ""
+          if item.kind == "movie" and item.year:
+              years = [int(y) for y in ANY_YEAR_RE.findall(best_extract)]
+              if years and all(abs(y - item.year) > 1 for y in years):
+                  return ""
+          return shorten_description(best_extract)'''
+          s = s.replace(old_return, new_return)
+
           p.write_text(s, encoding='utf-8')
           PY
 
