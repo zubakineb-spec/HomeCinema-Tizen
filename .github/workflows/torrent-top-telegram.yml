@@ -46,13 +46,14 @@ jobs:
           p = Path('src/main.py')
           s = p.read_text(encoding='utf-8')
 
-          # Tapochek currently presents a certificate chain that GitHub-hosted
-          # runners cannot validate. Disable verification ONLY for its public,
-          # read-only category requests; no credentials or secrets are sent.
+          # Tapochek: use its tracker search sorted by total downloads (o=4)
+          # instead of the ordinary forum view. The site's certificate chain is
+          # not trusted by GitHub-hosted runners, so TLS verification is disabled
+          # only for these public read-only requests; no credentials are sent.
           old = '''url = f"https://tapochek.net/viewforum.php?f={forum_id}"
               r = s.get(url, timeout=REQUEST_TIMEOUT, allow_redirects=True)
               if r.status_code != 200:'''
-          new = '''url = f"https://tapochek.net/viewforum.php?f={forum_id}"
+          new = '''url = f"https://tapochek.net/tracker.php?f={forum_id}&o=4&s=2&tm=-1&sns=-1"
               r = s.get(url, timeout=REQUEST_TIMEOUT, allow_redirects=True, verify=False)
               if r.status_code != 200:'''
           s = s.replace(old, new)
