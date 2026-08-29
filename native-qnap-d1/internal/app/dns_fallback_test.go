@@ -61,6 +61,45 @@ func TestTMDBFallbackActivatesAfterPrimaryNetworkError(t *testing.T) {
 	}
 }
 
+func TestTMDBImageFallbackActivatesForImageCDN(t *testing.T) {
+	primary := roundTripperFunc(func(*http.Request) (*http.Response, error) {
+		return nil, errors.New("dial tcp: lookup image.tmdb.org: no such host")
+	})
+	var resolved atomic.Int32
+	var direct atomic.Int32
+	tr := &tmdbFallbackTransport{
+		primary: primary,
+		resolver: resolverFunc(func(_ context.Context, host string) ([]string, error) {
+			resolved.Add(1)
+			if host != tmdbImageHost {
+				t.Fatalf("image fallback resolved wrong host: %s", host)
+			}
+			return []string{"18.244.115.50"}, nil
+		}),
+		directFactory: func(host, ip string) http.RoundTripper {
+			if host != tmdbImageHost || ip != "18.244.115.50" {
+				t.Fatalf("unexpected image direct target %s %s", host, ip)
+			}
+			return roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+				direct.Add(1)
+				if r.URL.Hostname() != tmdbImageHost {
+					t.Fatalf("image hostname changed: %s", r.URL.Hostname())
+				}
+				return &http.Response{StatusCode: 200, Status: "200 OK", Body: io.NopCloser(strings.NewReader("jpeg")), Header: http.Header{"Content-Type": []string{"image/jpeg"}}, Request: r}, nil
+			})
+		},
+	}
+	req, _ := http.NewRequest(http.MethodGet, "https://image.tmdb.org/t/p/w500/example.jpg", nil)
+	resp, err := tr.RoundTrip(req)
+	if err != nil {
+		t.Fatalf("image fallback failed: %v", err)
+	}
+	resp.Body.Close()
+	if resolved.Load() != 1 || direct.Load() != 1 {
+		t.Fatalf("image resolver=%d direct=%d", resolved.Load(), direct.Load())
+	}
+}
+
 func TestTMDBFallbackDoesNotReplaceHTTPResponse(t *testing.T) {
 	var resolved atomic.Int32
 	tr := &tmdbFallbackTransport{
@@ -83,7 +122,7 @@ func TestTMDBFallbackDoesNotReplaceHTTPResponse(t *testing.T) {
 	}
 }
 
-func TestTMDBFallbackOnlyHandlesTMDBAPIHost(t *testing.T) {
+func TestTMDBFallbackRejectsNonTMDBHost(t *testing.T) {
 	var resolved atomic.Int32
 	tr := &tmdbFallbackTransport{
 		primary:  roundTripperFunc(func(*http.Request) (*http.Response, error) { return nil, errors.New("network error") }),
@@ -96,6 +135,18 @@ func TestTMDBFallbackOnlyHandlesTMDBAPIHost(t *testing.T) {
 	}
 	if resolved.Load() != 0 {
 		t.Fatal("fallback activated for non-TMDB host")
+	}
+}
+
+func TestTMDBFallbackHostAllowlist(t *testing.T) {
+	if !isTMDBFallbackHost(tmdbAPIHost) {
+		t.Fatal("API host must be allowed")
+	}
+	if !isTMDBFallbackHost(tmdbImageHost) {
+		t.Fatal("image CDN host must be allowed")
+	}
+	if isTMDBFallbackHost("example.com") {
+		t.Fatal("non-TMDB host must not be allowed")
 	}
 }
 
@@ -128,7 +179,7 @@ func TestDirectTransportKeepsCertificateVerificationEnabled(t *testing.T) {
 	}
 }
 
-func TestDoHResolverFallsBackToPublicSeeds(t *testing.T) {
+func TestDoHResolverFallsBackToPublicSeedsForAPIHost(t *testing.T) {
 	r := &dohResolver{seeds: []string{"127.0.0.1", "3.170.19.94", "192.168.0.101"}}
 	ips, err := r.ResolveA(context.Background(), tmdbAPIHost)
 	if err != nil {
@@ -136,5 +187,16 @@ func TestDoHResolverFallsBackToPublicSeeds(t *testing.T) {
 	}
 	if len(ips) != 1 || ips[0] != "3.170.19.94" {
 		t.Fatalf("unexpected seeds: %#v", ips)
+	}
+}
+
+func TestDoHResolverDoesNotReuseAPISeedsForImageHost(t *testing.T) {
+	r := &dohResolver{seeds: []string{"3.170.19.94"}}
+	ips, err := r.ResolveA(context.Background(), tmdbImageHost)
+	if err == nil {
+		t.Fatalf("image host must not reuse API seeds: %#v", ips)
+	}
+	if len(ips) != 0 {
+		t.Fatalf("unexpected image seeds: %#v", ips)
 	}
 }
