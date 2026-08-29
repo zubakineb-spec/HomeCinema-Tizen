@@ -81,9 +81,9 @@ func newDoHResolver() *dohResolver {
 			"3.170.19.94", "3.170.19.97", "3.170.19.104", "3.170.19.106",
 			"54.230.253.60", "54.230.253.66", "54.230.253.88", "54.230.253.112",
 		},
-		// RC3.29: image.tmdb.org moved to BunnyCDN. This seed is only an
-		// emergency path when both system DNS and DoH are unavailable on the old
-		// QNAP. TLS still validates image.tmdb.org; verification is never disabled.
+		// RC3.29/RC3.30: image.tmdb.org is served by BunnyCDN. The seed is an
+		// emergency path when DoH is unavailable on the old QNAP. RC3.30 also
+		// supplies current ISRG roots for this direct TLS connection.
 		imageSeeds: []string{"143.244.60.196"},
 	}
 }
@@ -230,35 +230,17 @@ func newDirectHostTransport(host, ip string) http.RoundTripper {
 		ForceAttemptHTTP2:   false,
 		DisableKeepAlives:   true,
 		TLSHandshakeTimeout: 4 * time.Second,
-		TLSClientConfig:     &tls.Config{MinVersion: tls.VersionTLS12},
+		TLSClientConfig:     tlsConfigForDirectHost(host),
 	}
 }
 
-func (t *tmdbFallbackTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	primary := t.primary
-	if primary == nil {
-		primary = http.DefaultTransport
-	}
-	resp, primaryErr := primary.RoundTrip(req)
-	if primaryErr == nil {
-		return resp, nil
-	}
-	if req == nil || req.URL == nil {
-		return nil, primaryErr
-	}
-	host := req.URL.Hostname()
-	if !isTMDBFallbackHost(host) {
-		return nil, primaryErr
-	}
-	if req.Body != nil && req.GetBody == nil {
-		return nil, primaryErr
-	}
+func (t *tmdbFallbackTransport) roundTripFallback(req *http.Request, host string, cause error) (*http.Response, error) {
 	if t.resolver == nil {
-		return nil, primaryErr
+		return nil, cause
 	}
 	ips, resolveErr := t.resolver.ResolveA(req.Context(), host)
 	if resolveErr != nil {
-		return nil, fmt.Errorf("%w; TMDB DNS fallback failed for %s: %v", primaryErr, host, resolveErr)
+		return nil, fmt.Errorf("%w; TMDB DNS fallback failed for %s: %v", cause, host, resolveErr)
 	}
 	factory := t.directFactory
 	if factory == nil {
@@ -283,9 +265,43 @@ func (t *tmdbFallbackTransport) RoundTrip(req *http.Request) (*http.Response, er
 		fallbackErrs = append(fallbackErrs, ip+": "+err.Error())
 	}
 	if len(fallbackErrs) == 0 {
-		return nil, fmt.Errorf("%w; TMDB DNS fallback returned no usable addresses for %s", primaryErr, host)
+		return nil, fmt.Errorf("%w; TMDB DNS fallback returned no usable addresses for %s", cause, host)
 	}
-	return nil, fmt.Errorf("%w; TMDB direct fallback failed for %s: %s", primaryErr, host, strings.Join(fallbackErrs, "; "))
+	return nil, fmt.Errorf("%w; TMDB direct fallback failed for %s: %s", cause, host, strings.Join(fallbackErrs, "; "))
+}
+
+func (t *tmdbFallbackTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if req == nil || req.URL == nil {
+		return nil, fmt.Errorf("invalid HTTP request")
+	}
+	host := req.URL.Hostname()
+
+	// RC3.30: the user's QNAP resolver returns 127.0.0.1 for image.tmdb.org,
+	// which sends HTTPS to the NAS itself and presents the self-signed "QNAP NAS"
+	// certificate. Never consult the system resolver for artwork. Resolve only via
+	// DoH/host-specific public seeds and keep SNI/hostname as image.tmdb.org.
+	if strings.EqualFold(host, tmdbImageHost) {
+		if req.Body != nil && req.GetBody == nil {
+			return nil, fmt.Errorf("TMDB image request body cannot be replayed")
+		}
+		return t.roundTripFallback(req, host, fmt.Errorf("system DNS bypassed for %s", host))
+	}
+
+	primary := t.primary
+	if primary == nil {
+		primary = http.DefaultTransport
+	}
+	resp, primaryErr := primary.RoundTrip(req)
+	if primaryErr == nil {
+		return resp, nil
+	}
+	if !isTMDBFallbackHost(host) {
+		return nil, primaryErr
+	}
+	if req.Body != nil && req.GetBody == nil {
+		return nil, primaryErr
+	}
+	return t.roundTripFallback(req, host, primaryErr)
 }
 
 func publicIPv4List(values []string) []string {
