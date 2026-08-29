@@ -74,10 +74,10 @@ func TestTMDBImageFallbackActivatesForImageCDN(t *testing.T) {
 			if host != tmdbImageHost {
 				t.Fatalf("image fallback resolved wrong host: %s", host)
 			}
-			return []string{"18.244.115.50"}, nil
+			return []string{"143.244.60.196"}, nil
 		}),
 		directFactory: func(host, ip string) http.RoundTripper {
-			if host != tmdbImageHost || ip != "18.244.115.50" {
+			if host != tmdbImageHost || ip != "143.244.60.196" {
 				t.Fatalf("unexpected image direct target %s %s", host, ip)
 			}
 			return roundTripperFunc(func(r *http.Request) (*http.Response, error) {
@@ -85,7 +85,7 @@ func TestTMDBImageFallbackActivatesForImageCDN(t *testing.T) {
 				if r.URL.Hostname() != tmdbImageHost {
 					t.Fatalf("image hostname changed: %s", r.URL.Hostname())
 				}
-				return &http.Response{StatusCode: 200, Status: "200 OK", Body: io.NopCloser(strings.NewReader("jpeg")), Header: http.Header{"Content-Type": []string{"image/jpeg"}}, Request: r}, nil
+				return &http.Response{StatusCode: 200, Status: "200 OK", Body: io.NopCloser(strings.NewReader("webp")), Header: http.Header{"Content-Type": []string{"image/webp"}}, Request: r}, nil
 			})
 		},
 	}
@@ -151,7 +151,7 @@ func TestTMDBFallbackHostAllowlist(t *testing.T) {
 }
 
 func TestIsPublicIPv4(t *testing.T) {
-	good := []string{"3.170.19.94", "54.230.253.60", "8.8.8.8"}
+	good := []string{"3.170.19.94", "54.230.253.60", "143.244.60.196", "8.8.8.8"}
 	bad := []string{"127.0.0.1", "10.0.0.1", "172.18.0.2", "192.168.0.101", "169.254.1.2", "100.64.0.1", "224.0.0.1", "::1"}
 	for _, s := range good {
 		if !isPublicIPv4(net.ParseIP(s)) {
@@ -179,24 +179,41 @@ func TestDirectTransportKeepsCertificateVerificationEnabled(t *testing.T) {
 	}
 }
 
-func TestDoHResolverFallsBackToPublicSeedsForAPIHost(t *testing.T) {
-	r := &dohResolver{seeds: []string{"127.0.0.1", "3.170.19.94", "192.168.0.101"}}
-	ips, err := r.ResolveA(context.Background(), tmdbAPIHost)
-	if err != nil {
-		t.Fatalf("seed fallback failed: %v", err)
+func TestDoHResolverFallsBackToHostSpecificSeeds(t *testing.T) {
+	r := &dohResolver{
+		apiSeeds:   []string{"127.0.0.1", "3.170.19.94", "192.168.0.101"},
+		imageSeeds: []string{"127.0.0.1", "143.244.60.196", "192.168.0.101"},
 	}
-	if len(ips) != 1 || ips[0] != "3.170.19.94" {
-		t.Fatalf("unexpected seeds: %#v", ips)
+	apiIPs, err := r.ResolveA(context.Background(), tmdbAPIHost)
+	if err != nil {
+		t.Fatalf("API seed fallback failed: %v", err)
+	}
+	if len(apiIPs) != 1 || apiIPs[0] != "3.170.19.94" {
+		t.Fatalf("unexpected API seeds: %#v", apiIPs)
+	}
+	imageIPs, err := r.ResolveA(context.Background(), tmdbImageHost)
+	if err != nil {
+		t.Fatalf("image seed fallback failed: %v", err)
+	}
+	if len(imageIPs) != 1 || imageIPs[0] != "143.244.60.196" {
+		t.Fatalf("unexpected image seeds: %#v", imageIPs)
 	}
 }
 
-func TestDoHResolverDoesNotReuseAPISeedsForImageHost(t *testing.T) {
-	r := &dohResolver{seeds: []string{"3.170.19.94"}}
-	ips, err := r.ResolveA(context.Background(), tmdbImageHost)
-	if err == nil {
-		t.Fatalf("image host must not reuse API seeds: %#v", ips)
+func TestDoHResolverNeverCrossUsesSeeds(t *testing.T) {
+	r := &dohResolver{
+		apiSeeds:   []string{"3.170.19.94"},
+		imageSeeds: []string{"143.244.60.196"},
 	}
-	if len(ips) != 0 {
-		t.Fatalf("unexpected image seeds: %#v", ips)
+	api := r.seedIPsForHost(tmdbAPIHost)
+	image := r.seedIPsForHost(tmdbImageHost)
+	if len(api) != 1 || api[0] != "3.170.19.94" {
+		t.Fatalf("unexpected API host seeds: %#v", api)
+	}
+	if len(image) != 1 || image[0] != "143.244.60.196" {
+		t.Fatalf("unexpected image host seeds: %#v", image)
+	}
+	if len(r.seedIPsForHost("example.com")) != 0 {
+		t.Fatal("non-TMDB host received fallback seeds")
 	}
 }
