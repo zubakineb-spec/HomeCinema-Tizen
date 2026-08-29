@@ -13,7 +13,10 @@ import (
 	"time"
 )
 
-const tmdbAPIHost = "api.themoviedb.org"
+const (
+	tmdbAPIHost   = "api.themoviedb.org"
+	tmdbImageHost = "image.tmdb.org"
+)
 
 type ipv4Resolver interface {
 	ResolveA(context.Context, string) ([]string, error)
@@ -28,14 +31,21 @@ type dohProvider struct {
 
 type dohResolver struct {
 	providers []dohProvider
-	seeds     []string
-	timeout   time.Duration
+	// These historical static seeds belong to api.themoviedb.org only. They are
+	// intentionally never reused for image.tmdb.org because the CDN address set
+	// is independent and changes over time.
+	seeds   []string
+	timeout time.Duration
 }
 
 type tmdbFallbackTransport struct {
 	primary       http.RoundTripper
 	resolver      ipv4Resolver
 	directFactory func(string, string) http.RoundTripper
+}
+
+func isTMDBFallbackHost(host string) bool {
+	return strings.EqualFold(host, tmdbAPIHost) || strings.EqualFold(host, tmdbImageHost)
 }
 
 func newTMDBHTTPClient() *http.Client {
@@ -85,9 +95,14 @@ func (r *dohResolver) ResolveA(ctx context.Context, host string) ([]string, erro
 			errs = append(errs, p.name+": "+err.Error())
 		}
 	}
-	seedIPs := publicIPv4List(r.seeds)
-	if len(seedIPs) > 0 {
-		return seedIPs, nil
+	// The bundled seeds were captured for api.themoviedb.org. Using them for
+	// image.tmdb.org would direct TLS to the wrong CDN and can produce exactly
+	// the missing-artwork symptom RC3.28 fixes.
+	if strings.EqualFold(host, tmdbAPIHost) {
+		seedIPs := publicIPv4List(r.seeds)
+		if len(seedIPs) > 0 {
+			return seedIPs, nil
+		}
 	}
 	if len(errs) == 0 {
 		return nil, fmt.Errorf("DoH returned no public IPv4 addresses for %s", host)
@@ -214,7 +229,11 @@ func (t *tmdbFallbackTransport) RoundTrip(req *http.Request) (*http.Response, er
 	if primaryErr == nil {
 		return resp, nil
 	}
-	if req == nil || req.URL == nil || !strings.EqualFold(req.URL.Hostname(), tmdbAPIHost) {
+	if req == nil || req.URL == nil {
+		return nil, primaryErr
+	}
+	host := req.URL.Hostname()
+	if !isTMDBFallbackHost(host) {
 		return nil, primaryErr
 	}
 	if req.Body != nil && req.GetBody == nil {
@@ -223,9 +242,9 @@ func (t *tmdbFallbackTransport) RoundTrip(req *http.Request) (*http.Response, er
 	if t.resolver == nil {
 		return nil, primaryErr
 	}
-	ips, resolveErr := t.resolver.ResolveA(req.Context(), tmdbAPIHost)
+	ips, resolveErr := t.resolver.ResolveA(req.Context(), host)
 	if resolveErr != nil {
-		return nil, fmt.Errorf("%w; TMDB DNS fallback failed: %v", primaryErr, resolveErr)
+		return nil, fmt.Errorf("%w; TMDB DNS fallback failed for %s: %v", primaryErr, host, resolveErr)
 	}
 	factory := t.directFactory
 	if factory == nil {
@@ -242,7 +261,7 @@ func (t *tmdbFallbackTransport) RoundTrip(req *http.Request) (*http.Response, er
 			}
 			retry.Body = body
 		}
-		rt := factory(tmdbAPIHost, ip)
+		rt := factory(host, ip)
 		response, err := rt.RoundTrip(retry)
 		if err == nil {
 			return response, nil
@@ -250,9 +269,9 @@ func (t *tmdbFallbackTransport) RoundTrip(req *http.Request) (*http.Response, er
 		fallbackErrs = append(fallbackErrs, ip+": "+err.Error())
 	}
 	if len(fallbackErrs) == 0 {
-		return nil, fmt.Errorf("%w; TMDB DNS fallback returned no usable addresses", primaryErr)
+		return nil, fmt.Errorf("%w; TMDB DNS fallback returned no usable addresses for %s", primaryErr, host)
 	}
-	return nil, fmt.Errorf("%w; TMDB direct fallback failed: %s", primaryErr, strings.Join(fallbackErrs, "; "))
+	return nil, fmt.Errorf("%w; TMDB direct fallback failed for %s: %s", primaryErr, host, strings.Join(fallbackErrs, "; "))
 }
 
 func publicIPv4List(values []string) []string {
