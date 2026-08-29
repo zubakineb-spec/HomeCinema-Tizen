@@ -39,6 +39,16 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      - name: Tighten category parser
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('src/main.py')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace('soup.find_all(["h1", "h2", "h3", "div", "td"])', 'soup.find_all(["h1", "h2", "h3"])')
+          p.write_text(s, encoding='utf-8')
+          PY
+
       - name: Build and send report
         env:
           TOP_N: "25"
