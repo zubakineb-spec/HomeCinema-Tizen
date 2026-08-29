@@ -1,0 +1,44 @@
+name: Telegram Torrent Top 25
+
+on:
+  workflow_dispatch:
+  schedule:
+    # 18:00 Asia/Yekaterinburg (UTC+5) = 13:00 UTC.
+    # GitHub scheduled runs may start a few minutes later under load.
+    - cron: "0 13 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: telegram-torrent-top-25
+  cancel-in-progress: false
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: telegram-top-agent
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: telegram-top-agent/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Build and send report
+        env:
+          TOP_N: "25"
+          TZ_NAME: Asia/Yekaterinburg
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python src/main.py
