@@ -41,12 +41,37 @@ func imageCachePath(dir, raw string, u *url.URL) string {
 	return filepath.Join(dir, hex.EncodeToString(sum[:])+cacheImageExtension(u))
 }
 
+func sniffImageContentType(path string) string {
+	f, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+	buf := make([]byte, 512)
+	n, err := f.Read(buf)
+	if err != nil && err != io.EOF {
+		return ""
+	}
+	if n <= 0 {
+		return ""
+	}
+	ct := http.DetectContentType(buf[:n])
+	if strings.HasPrefix(strings.ToLower(ct), "image/") {
+		return ct
+	}
+	return ""
+}
+
 func serveCachedImage(w http.ResponseWriter, r *http.Request, path string) bool {
 	info, err := os.Stat(path)
 	if err != nil || info.IsDir() {
 		return false
 	}
-	if ct := mime.TypeByExtension(filepath.Ext(path)); ct != "" {
+	// RC3.29: TMDB/BunnyCDN can return WebP bytes for a URL ending in .jpg.
+	// Always prefer the real file signature over the cached filename extension.
+	if ct := sniffImageContentType(path); ct != "" {
+		w.Header().Set("Content-Type", ct)
+	} else if ct := mime.TypeByExtension(filepath.Ext(path)); ct != "" {
 		w.Header().Set("Content-Type", ct)
 	}
 	w.Header().Set("Cache-Control", "public, max-age=2592000, immutable")
@@ -108,13 +133,25 @@ func (s *Server) imageCache(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, http.StatusBadGateway, "TMDB image read failed")
 		return
 	}
+	if len(data) == 0 {
+		jsonErr(w, http.StatusBadGateway, "TMDB image empty")
+		return
+	}
+
+	contentType := strings.TrimSpace(resp.Header.Get("Content-Type"))
+	if !strings.HasPrefix(strings.ToLower(contentType), "image/") {
+		contentType = http.DetectContentType(data)
+	}
+	if !strings.HasPrefix(strings.ToLower(contentType), "image/") {
+		jsonErr(w, http.StatusBadGateway, "TMDB response is not an image")
+		return
+	}
+
 	if err = writeAtomicBytes(path, data); err != nil {
 		jsonErr(w, http.StatusInternalServerError, "image cache write failed")
 		return
 	}
-	if resp.Header.Get("Content-Type") != "" {
-		w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
-	}
+	w.Header().Set("Content-Type", contentType)
 	w.Header().Set("Cache-Control", "public, max-age=2592000, immutable")
 	w.Header().Set("X-HomeCinema-Image-Cache", "MISS")
 	_, _ = w.Write(data)
