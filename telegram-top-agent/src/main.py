@@ -24,14 +24,10 @@ USER_AGENT = os.getenv(
     "(KHTML, like Gecko) Chrome/151 Safari/537.36",
 )
 
-YEAR_RE = re.compile(r"\((19\d{2}|20\d{2})\)")
-SERIES_RE = re.compile(
-    r"(?ix)(?:\bсезон(?:ы|а)?\b|\bсер(?:ия|ии|ий)\b|\bseason\b|\bepisodes?\b|"
-    r"\bS\d{1,2}\b|\b\d{1,2}[xх]\d{1,3}\b|\[\s*\d{1,2}[xх]\d{1,3})"
-)
+YEAR_RE = re.compile(r"\((19\d{2}|20\d{2})(?:-(?:19|20)\d{2})?\)")
 TECH_RE = re.compile(
     r"(?ix)\b(?:2160p|1080p|1080i|720p|480p|4k|uhd|hdr10\+?|dolby\s*vision|dv|"
-    r"web[- .]?dl|web[- .]?rip|blu[- ]?ray|bdremux|bdrip|hdrip|dvdrip|hdtv|"
+    r"web[- .]?dl|web[- .]?rip|blu[- ]?ray|bdremux|bdrip|hdrip|dvdrip|hdtv|iptv|"
     r"x26[45]|hevc|avc|remux|proper|repack)\b"
 )
 
@@ -76,8 +72,7 @@ def fetch_first(urls: Iterable[str]) -> tuple[str, str]:
 
 def clean_title(raw: str) -> str:
     text = html.unescape(raw)
-    text = re.sub(r"\s+", " ", text).strip(" \t\r\n-|•")
-    return text
+    return re.sub(r"\s+", " ", text).strip(" \t\r\n-|•")
 
 
 def extract_year(title: str) -> int | None:
@@ -85,105 +80,100 @@ def extract_year(title: str) -> int | None:
     return int(m.group(1)) if m else None
 
 
-def detect_kind(title: str) -> str:
-    return "series" if SERIES_RE.search(title) else "movie"
+def base_title(title: str) -> str:
+    t = clean_title(title)
+    m = YEAR_RE.search(t)
+    if m:
+        t = t[:m.start()]
+    t = re.sub(r"\[[^\]]*(?:S\d|\d{1,2}[xх]\d|из\s+\d)[^\]]*\]", " ", t, flags=re.I)
+    t = TECH_RE.sub(" ", t)
+    return re.sub(r"\s+", " ", t).strip(" /-|,")
 
 
 def canonical_title(title: str) -> str:
-    t = title.lower().replace("ё", "е")
-    t = YEAR_RE.sub(" ", t)
-    t = re.sub(r"\[[^\]]*\]", " ", t)
-    t = re.sub(r"\([^)]*(?:сезон|серии|series|episode|s\d|\d+[xх]\d+)[^)]*\)", " ", t, flags=re.I)
-    t = TECH_RE.sub(" ", t)
-    t = re.sub(r"\b(?:сезон(?:ы|а)?|сер(?:ия|ии|ий)|season|episodes?)\b.*$", " ", t, flags=re.I)
-    t = re.sub(r"\b\d{1,2}[xх]\d{1,3}(?:-\d{1,3})?\b", " ", t)
+    t = base_title(title).lower().replace("ё", "е")
     t = re.sub(r"[^0-9a-zа-я]+", " ", t, flags=re.I)
     return re.sub(r"\s+", " ", t).strip()
 
 
-def int_from_text(text: str) -> int | None:
-    m = re.search(r"(?<!\d)(\d[\d\s.,]{0,12})(?!\d)", text)
-    if not m:
+def parse_peer_metric(cell) -> int | None:
+    # Rutor's final column is the peer column: seeders + leechers.
+    nums = [int(x) for x in re.findall(r"(?<![\d.])\d+(?![\d.])", cell.get_text(" ", strip=True))]
+    nums = [n for n in nums if 0 <= n < 1_000_000]
+    if not nums:
         return None
-    digits = re.sub(r"\D", "", m.group(1))
-    return int(digits) if digits else None
+    # Usually exactly two values (S and L). Summing them gives current active peers.
+    return sum(nums[-2:]) if len(nums) >= 2 else nums[-1]
 
 
-def parse_rutor() -> list[Item]:
-    urls = [
-        "https://rutor.info/",
-        "https://rutor.is/",
-        "https://new-rutor.org/",
-    ]
-    page, _ = fetch_first(urls)
-    soup = BeautifulSoup(page, "html.parser")
+def parse_rutor_category_table(table, kind: str) -> list[Item]:
     items: list[Item] = []
-
-    marker = soup.find(string=re.compile(r"Топ\s+фильмов\s+сейчас", re.I))
-    container = marker.parent if marker else soup
-    if marker:
-        for _ in range(5):
-            if container and container.name in {"table", "div", "section", "td"}:
-                text = container.get_text(" ", strip=True)
-                if "Топ фильмов" in text and len(text) > 150:
-                    break
-            container = container.parent if container else soup
-
-    rows = (container or soup).find_all("tr")
-    for row in rows:
-        cells = row.find_all(["td", "th"])
-        if len(cells) < 2:
+    for row in table.find_all("tr"):
+        cells = row.find_all("td")
+        if len(cells) < 3:
             continue
-        title_candidates = []
-        for a in row.find_all("a"):
-            txt = clean_title(a.get_text(" ", strip=True))
-            if YEAR_RE.search(txt):
-                title_candidates.append(txt)
+        anchors = [clean_title(a.get_text(" ", strip=True)) for a in row.find_all("a")]
+        title_candidates = [x for x in anchors if YEAR_RE.search(x)]
         if not title_candidates:
             continue
         title = max(title_candidates, key=len)
-        nums = [int_from_text(c.get_text(" ", strip=True)) for c in cells]
-        nums = [n for n in nums if n is not None and n < 10_000_000]
-        if not nums:
-            continue
-        metric = nums[-1]
-        if metric <= 0:
+        metric = parse_peer_metric(cells[-1])
+        if metric is None or metric <= 0:
             continue
         items.append(Item(
             title=title,
             year=extract_year(title),
-            kind=detect_kind(title),
+            kind=kind,
             source="Rutor",
-            metric_name="скачивают сейчас",
+            metric_name="активных пиров",
             metric_value=metric,
         ))
+    return items
 
-    if len(items) < 10:
-        text = soup.get_text("\n", strip=True)
-        m = re.search(r"Топ\s+фильмов\s+сейчас(.*?)(?:Премьеры\s+сегодня|$)", text, flags=re.I | re.S)
-        if m:
-            lines = [clean_title(x) for x in m.group(1).splitlines() if clean_title(x)]
-            for i, line in enumerate(lines[:-1]):
-                if YEAR_RE.search(line):
-                    n = int_from_text(lines[i + 1])
-                    if n and n > 0:
-                        items.append(Item(
-                            title=line,
-                            year=extract_year(line),
-                            kind=detect_kind(line),
-                            source="Rutor",
-                            metric_name="скачивают сейчас",
-                            metric_value=n,
-                        ))
+
+def parse_rutor() -> list[Item]:
+    page, _ = fetch_first([
+        "https://rutor.info/top",
+        "https://rutor.is/top",
+        "https://new-rutor.org/top",
+    ])
+    soup = BeautifulSoup(page, "html.parser")
+
+    category_kinds = {
+        "зарубежные фильмы": "movie",
+        "наши фильмы": "movie",
+        "зарубежные сериалы": "series",
+        "наши сериалы": "series",
+    }
+
+    items: list[Item] = []
+    matched_categories: set[str] = set()
+    for heading in soup.find_all(["h1", "h2", "h3", "div", "td"]):
+        text = clean_title(heading.get_text(" ", strip=True)).lower()
+        if "самые популярные торренты в категории" not in text:
+            continue
+        category = next((name for name in category_kinds if name in text), None)
+        if not category or category in matched_categories:
+            continue
+        table = heading.find_next("table")
+        if not table:
+            continue
+        parsed = parse_rutor_category_table(table, category_kinds[category])
+        if parsed:
+            matched_categories.add(category)
+            items.extend(parsed)
+
+    if not items:
+        raise RuntimeError("movie/series category tables not found")
+    print("Rutor categories: " + ", ".join(sorted(matched_categories)), file=sys.stderr)
     return dedupe_source(items)
 
 
 def parse_kinozal() -> list[Item]:
-    urls = [
+    page, _ = fetch_first([
         "https://kinozal.tv/top.php",
         "https://kinozal.me/top.php",
-    ]
-    page, _ = fetch_first(urls)
+    ])
     soup = BeautifulSoup(page, "html.parser")
     items: list[Item] = []
 
@@ -191,39 +181,36 @@ def parse_kinozal() -> list[Item]:
         rows = table.find_all("tr")
         if not rows:
             continue
-        headers = [clean_title(c.get_text(" ", strip=True)).lower() for c in rows[0].find_all(["th", "td"])]
-        download_idx = next((i for i, h in enumerate(headers) if "скач" in h), None)
-        seed_idx = next((i for i, h in enumerate(headers) if "сид" in h), None)
+        header_text = clean_title(rows[0].get_text(" ", strip=True)).lower()
+        if not any(k in header_text for k in ("название", "раздач")):
+            continue
         for row in rows[1:]:
             cells = row.find_all("td")
             if len(cells) < 2:
                 continue
             anchors = [clean_title(a.get_text(" ", strip=True)) for a in row.find_all("a")]
-            anchors = [x for x in anchors if YEAR_RE.search(x)]
-            if not anchors:
+            candidates = [x for x in anchors if YEAR_RE.search(x)]
+            if not candidates:
                 continue
-            title = max(anchors, key=len)
-            metric_name = "популярность"
-            metric = None
-            if download_idx is not None and download_idx < len(cells):
-                metric = int_from_text(cells[download_idx].get_text(" ", strip=True))
-                metric_name = "скачиваний"
-            if (metric is None or metric <= 0) and seed_idx is not None and seed_idx < len(cells):
-                metric = int_from_text(cells[seed_idx].get_text(" ", strip=True))
-                metric_name = "сидов"
-            if metric is None:
-                all_nums = [int_from_text(c.get_text(" ", strip=True)) for c in cells]
-                all_nums = [n for n in all_nums if n is not None and 0 < n < 10_000_000]
-                metric = all_nums[-1] if all_nums else None
-            if not metric:
+            title = max(candidates, key=len)
+            lower = title.lower()
+            series = bool(re.search(r"\[(?:s\d|\d{1,2}[xх]\d|\d+\s+из\s+\d)", lower, re.I))
+            # Only video-looking releases; reject obvious audio/books/games/sport.
+            if not re.search(r"(?i)(web|bd|blu|hdrip|dvdrip|hdtv|iptv|1080|720|2160|4k)", title):
+                continue
+            if re.search(r"(?i)\b(mp3|flac|fb2|pdf|djvu|pc\s*\||repack\s+от|ufc|футбол|бокс\.)\b", title):
+                continue
+            nums = [int(x) for x in re.findall(r"\d+", cells[-1].get_text(" ", strip=True))]
+            nums = [n for n in nums if 0 < n < 1_000_000]
+            if not nums:
                 continue
             items.append(Item(
                 title=title,
                 year=extract_year(title),
-                kind=detect_kind(title),
+                kind="series" if series else "movie",
                 source="Kinozal",
-                metric_name=metric_name,
-                metric_value=metric,
+                metric_name="показатель популярности",
+                metric_value=max(nums),
             ))
     return dedupe_source(items)
 
@@ -237,7 +224,7 @@ def dedupe_source(items: list[Item]) -> list[Item]:
         prev = best.get(key)
         if prev is None or item.metric_value > prev.metric_value:
             best[key] = item
-    return sorted(best.values(), key=lambda x: x.metric_value, reverse=True)[:100]
+    return sorted(best.values(), key=lambda x: x.metric_value, reverse=True)[:200]
 
 
 def rank_items(items: list[Item]) -> list[Item]:
@@ -262,9 +249,7 @@ def same_work(a: Item, b: Item) -> bool:
     ca, cb = canonical_title(a.title), canonical_title(b.title)
     if not ca or not cb:
         return False
-    if ca == cb:
-        return True
-    return SequenceMatcher(None, ca, cb).ratio() >= 0.90
+    return ca == cb or SequenceMatcher(None, ca, cb).ratio() >= 0.92
 
 
 def merge_sources(items: list[Item]) -> list[Item]:
@@ -278,16 +263,16 @@ def merge_sources(items: list[Item]) -> list[Item]:
         target.aggregate_score += item.aggregate_score * 0.85
         target.source_count += 1
         target.source_notes += f"; {item.source}: {item.metric_value} {item.metric_name}"
-        if len(item.title) < len(target.title):
+        if len(base_title(item.title)) < len(base_title(target.title)):
             target.title = item.title
             target.year = item.year or target.year
     return merged
 
 
 def safe_display_title(title: str) -> str:
-    t = re.sub(r"\s+", " ", title).strip()
-    t = re.sub(r"\s*[|/]\s*(?:WEB|BD|Blu|HDR|2160|1080|720).*$", "", t, flags=re.I)
-    return t[:180]
+    t = base_title(title)
+    year = extract_year(title)
+    return f"{t} ({year})" if year else t
 
 
 def build_report(items: list[Item], errors: list[str]) -> str:
@@ -297,13 +282,13 @@ def build_report(items: list[Item], errors: list[str]) -> str:
 
     lines = [
         f"🎬 Торрент-популярность — {now:%d.%m.%Y}",
-        "Только названия и агрегированные публичные показатели. Без ссылок на раздачи.",
+        "Только названия и публичные показатели популярности. Без ссылок на раздачи.",
         "",
     ]
     if movies:
-        lines.append("🔥 ФИЛЬМЫ — ТОП-25")
+        lines.append(f"🔥 ФИЛЬМЫ — ТОП-{min(TOP_N, len(movies))}")
         for i, x in enumerate(movies, 1):
-            multi = f" · {x.source_count} ист." if x.source_count > 1 else ""
+            multi = f" · {x.source_count} релиза/ист." if x.source_count > 1 else ""
             lines.append(f"{i}. {safe_display_title(x.title)}{multi}")
             lines.append(f"   {x.source_notes}")
     else:
@@ -311,9 +296,9 @@ def build_report(items: list[Item], errors: list[str]) -> str:
 
     lines.append("")
     if series:
-        lines.append("📺 СЕРИАЛЫ — ТОП-25")
+        lines.append(f"📺 СЕРИАЛЫ — ТОП-{min(TOP_N, len(series))}")
         for i, x in enumerate(series, 1):
-            multi = f" · {x.source_count} ист." if x.source_count > 1 else ""
+            multi = f" · {x.source_count} релиза/ист." if x.source_count > 1 else ""
             lines.append(f"{i}. {safe_display_title(x.title)}{multi}")
             lines.append(f"   {x.source_notes}")
     else:
@@ -331,15 +316,7 @@ def split_telegram(text: str, max_len: int = 3800) -> list[str]:
         if len(current) + len(line) > max_len and current:
             chunks.append(current.rstrip())
             current = ""
-        if len(line) > max_len:
-            for i in range(0, len(line), max_len):
-                part = line[i:i + max_len]
-                if current:
-                    chunks.append(current.rstrip())
-                    current = ""
-                chunks.append(part.rstrip())
-        else:
-            current += line
+        current += line
     if current:
         chunks.append(current.rstrip())
     return chunks
@@ -350,8 +327,15 @@ def send_telegram(text: str) -> None:
     chat_id = os.getenv("TELEGRAM_CHAT_ID", "").strip()
     if not token or not chat_id:
         raise RuntimeError("TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID must be configured as GitHub Actions secrets")
-    api = f"https://api.telegram.org/bot{token}/sendMessage"
+
     s = session()
+    identity = s.get(f"https://api.telegram.org/bot{token}/getMe", timeout=REQUEST_TIMEOUT)
+    if identity.status_code != 200:
+        raise RuntimeError(f"Telegram getMe HTTP {identity.status_code}: {identity.text[:300]}")
+    me = identity.json().get("result", {})
+    print(f"Telegram bot identity: @{me.get('username', '?')} (id={me.get('id', '?')})", file=sys.stderr)
+
+    api = f"https://api.telegram.org/bot{token}/sendMessage"
     for idx, chunk in enumerate(split_telegram(text)):
         r = s.post(api, json={
             "chat_id": chat_id,
@@ -360,6 +344,12 @@ def send_telegram(text: str) -> None:
         }, timeout=REQUEST_TIMEOUT)
         if r.status_code != 200:
             raise RuntimeError(f"Telegram API HTTP {r.status_code}: {r.text[:300]}")
+        payload = r.json().get("result", {})
+        print(
+            f"Telegram delivered: message_id={payload.get('message_id', '?')} "
+            f"chat_id={payload.get('chat', {}).get('id', '?')}",
+            file=sys.stderr,
+        )
         if idx:
             time.sleep(0.5)
 
