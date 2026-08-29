@@ -8,7 +8,6 @@ on:
       - "telegram-top-agent/**"
   schedule:
     # 18:00 Asia/Yekaterinburg (UTC+5) = 13:00 UTC.
-    # GitHub scheduled runs may start a few minutes later under load.
     - cron: "0 13 * * *"
 
 permissions:
@@ -46,27 +45,79 @@ jobs:
           p = Path('src/main.py')
           s = p.read_text(encoding='utf-8')
 
-          # Tapochek: use its tracker search sorted by total downloads (o=4)
-          # instead of the ordinary forum view. The site's certificate chain is
-          # not trusted by GitHub-hosted runners, so TLS verification is disabled
-          # only for these public read-only requests; no credentials are sent.
-          old = '''url = f"https://tapochek.net/viewforum.php?f={forum_id}"
-              r = s.get(url, timeout=REQUEST_TIMEOUT, allow_redirects=True)
-              if r.status_code != 200:'''
-          new = '''url = f"https://tapochek.net/tracker.php?f={forum_id}&o=4&s=2&tm=-1&sns=-1"
-              r = s.get(url, timeout=REQUEST_TIMEOUT, allow_redirects=True, verify=False)
-              if r.status_code != 200:'''
-          s = s.replace(old, new)
+          # Public independent ranking source. It exposes two explicit homepage
+          # blocks: movies "ТОП торрентов - сейчас скачивают" and series
+          # "Лучшие сериалы - скачивают сейчас". No numeric counter is public,
+          # therefore the metric is ordinal rank, not an invented download count.
+          injected = r'''
+          def parse_rutrackerr_public() -> list[Item]:
+              page, _ = fetch_first(["https://rutrackerr.ru/"])
+              soup = BeautifulSoup(page, "html.parser")
 
-          # Wikipedia: strip disambiguation suffixes from page titles before
-          # matching and require an almost exact title/alias match.
+              def section(start_re: str, stop_re: str, kind: str) -> list[Item]:
+                  marker = soup.find(string=re.compile(start_re, re.I))
+                  if not marker:
+                      return []
+                  items: list[Item] = []
+                  seen: set[str] = set()
+                  for node in marker.parent.next_elements:
+                      if isinstance(node, NavigableString):
+                          txt = clean_title(str(node))
+                          if items and re.search(stop_re, txt, re.I):
+                              break
+                          continue
+                      if not isinstance(node, Tag) or node.name != "a":
+                          continue
+                      title = clean_title(node.get_text(" ", strip=True))
+                      if not PAREN_YEAR_RE.search(title):
+                          continue
+                      href = str(node.get("href", ""))
+                      if not href or title.lower().startswith("скачать торрент"):
+                          continue
+                      key = canonical_title(title)
+                      if not key or key in seen:
+                          continue
+                      seen.add(key)
+                      rank = len(items) + 1
+                      items.append(Item(
+                          title=title,
+                          year=extract_year(title),
+                          kind=kind,
+                          source="Rutrackerr.ru",
+                          metric_name="место в публичном рейтинге",
+                          metric_value=max(1, 101 - rank),
+                          metric_display=f"№{rank} в рейтинге «сейчас скачивают»",
+                      ))
+                      if rank >= 25:
+                          break
+                  return items
+
+              movies = section(
+                  r"ТОП\s+торрентов\s*-?\s*сейчас\s+скачивают",
+                  r"Обновления\s+на\s+сайте|Лучшие\s+сериалы",
+                  "movie",
+              )
+              series = section(
+                  r"Лучшие\s+сериалы\s*-?\s*скачивают\s+сейчас",
+                  r"ЖАНРЫ\s+ФИЛЬМОВ|Фильмы\s+через\s+торрент",
+                  "series",
+              )
+              print(f"Rutrackerr.ru: movies={len(movies)}, series={len(series)}", file=sys.stderr)
+              result = movies + series
+              if not result:
+                  raise RuntimeError("public ranking blocks not parsed")
+              return dedupe_source(result)
+          '''
+          s = s.replace('\ndef parse_kinozal()', injected + '\n\ndef parse_kinozal()', 1)
+          s = s.replace('        ("Tapochek", parse_tapochek),', '        ("Rutrackerr.ru", parse_rutrackerr_public),')
+
+          # Wikipedia: remove disambiguation suffixes and demand high title match.
           s = s.replace(
               'page_title = canonical_title(str(page.get("title", "")))',
               'page_title = canonical_title(re.sub(r"\\s*\\([^)]*\\)\\s*$", "", str(page.get("title", ""))))'
           )
           s = s.replace('if best_score < 0.52:', 'if best_score < 0.98:')
 
-          # Reject obvious disambiguation/list pages and wrong-year film pages.
           old_return = '''if best_score < 0.98:
               return ""
           return shorten_description(best_extract)'''
