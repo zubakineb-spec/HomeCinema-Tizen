@@ -18,6 +18,7 @@ type Config struct {
 	TMDBToken         string
 	ImageCacheDir     string
 	EnableDTSFallback bool
+	AutoScanSeconds   int
 }
 
 func getenv(k, d string) string {
@@ -39,6 +40,18 @@ func boolenv(k string, d bool) bool {
 	return b
 }
 
+func intenv(k string, d int) int {
+	v := strings.TrimSpace(os.Getenv(k))
+	if v == "" {
+		return d
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 0 {
+		return d
+	}
+	return n
+}
+
 func LoadConfig() Config {
 	exe, _ := os.Executable()
 	base := filepath.Dir(exe)
@@ -52,5 +65,6 @@ func LoadConfig() Config {
 		TMDBToken:         strings.TrimSpace(os.Getenv("TMDB_BEARER_TOKEN")),
 		ImageCacheDir:     getenv("HC_IMAGE_CACHE_DIR", filepath.Join(dataDir, "image-cache")),
 		EnableDTSFallback: boolenv("HC_ENABLE_DTS_FALLBACK", false),
+		AutoScanSeconds:   intenv("HC_AUTO_SCAN_SECONDS", 60),
 	}
 }
