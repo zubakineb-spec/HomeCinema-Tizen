@@ -14,6 +14,7 @@ from zoneinfo import ZoneInfo
 
 import requests
 from bs4 import BeautifulSoup
+from bs4.element import NavigableString, Tag
 
 TOP_N = int(os.getenv("TOP_N", "25"))
 TZ_NAME = os.getenv("TZ_NAME", "Asia/Yekaterinburg")
@@ -28,7 +29,12 @@ YEAR_RE = re.compile(r"\((19\d{2}|20\d{2})(?:-(?:19|20)\d{2})?\)")
 TECH_RE = re.compile(
     r"(?ix)\b(?:2160p|1080p|1080i|720p|480p|4k|uhd|hdr10\+?|dolby\s*vision|dv|"
     r"web[- .]?dl|web[- .]?rip|blu[- ]?ray|bdremux|bdrip|hdrip|dvdrip|hdtv|iptv|"
-    r"x26[45]|hevc|avc|remux|proper|repack)\b"
+    r"x26[45]|hevc|avc|remux|proper|repack|satrip|tsrip)\b"
+)
+NON_VIDEO_RE = re.compile(
+    r"(?ix)\b(?:mp3|flac|aac|wav|fb2|epub|pdf|djvu|audiobook|аудиокниг|"
+    r"pc\s*\||repack\s+от|driver|windows|android|portable|software|софт|игр[аы]|"
+    r"ufc|футбол|хоккей|бокс|формула\s*1)\b"
 )
 
 
@@ -40,6 +46,7 @@ class Item:
     source: str
     metric_name: str
     metric_value: int
+    metric_display: str = ""
     source_rank: int = 0
     aggregate_score: float = 0.0
     source_count: int = 1
@@ -96,13 +103,23 @@ def canonical_title(title: str) -> str:
     return re.sub(r"\s+", " ", t).strip()
 
 
+def looks_like_video(title: str) -> bool:
+    if NON_VIDEO_RE.search(title):
+        return False
+    return bool(
+        YEAR_RE.search(title)
+        and (
+            TECH_RE.search(title)
+            or re.search(r"(?i)\b(?:film|movie|сезон|серии|series|season)\b", title)
+        )
+    )
+
+
 def parse_peer_metric(cell) -> int | None:
-    # Rutor's final column is the peer column: seeders + leechers.
     nums = [int(x) for x in re.findall(r"(?<![\d.])\d+(?![\d.])", cell.get_text(" ", strip=True))]
     nums = [n for n in nums if 0 <= n < 1_000_000]
     if not nums:
         return None
-    # Usually exactly two values (S and L). Summing them gives current active peers.
     return sum(nums[-2:]) if len(nums) >= 2 else nums[-1]
 
 
@@ -138,17 +155,15 @@ def parse_rutor() -> list[Item]:
         "https://new-rutor.org/top",
     ])
     soup = BeautifulSoup(page, "html.parser")
-
     category_kinds = {
         "зарубежные фильмы": "movie",
         "наши фильмы": "movie",
         "зарубежные сериалы": "series",
         "наши сериалы": "series",
     }
-
     items: list[Item] = []
     matched_categories: set[str] = set()
-    for heading in soup.find_all(["h1", "h2", "h3", "div", "td"]):
+    for heading in soup.find_all(["h1", "h2", "h3"]):
         text = clean_title(heading.get_text(" ", strip=True)).lower()
         if "самые популярные торренты в категории" not in text:
             continue
@@ -162,10 +177,101 @@ def parse_rutor() -> list[Item]:
         if parsed:
             matched_categories.add(category)
             items.extend(parsed)
-
     if not items:
         raise RuntimeError("movie/series category tables not found")
     print("Rutor categories: " + ", ".join(sorted(matched_categories)), file=sys.stderr)
+    return dedupe_source(items)
+
+
+def nearby_text_after_heading(heading: Tag, max_chars: int = 12000) -> str:
+    pieces: list[str] = []
+    chars = 0
+    for node in heading.next_elements:
+        if node is heading:
+            continue
+        if isinstance(node, Tag) and node.name == "h2":
+            break
+        if isinstance(node, NavigableString):
+            text = str(node)
+            pieces.append(text)
+            chars += len(text)
+        elif isinstance(node, Tag):
+            for attr in ("alt", "title"):
+                value = node.get(attr)
+                if value:
+                    text = str(value)
+                    pieces.append(text)
+                    chars += len(text)
+        if chars >= max_chars:
+            break
+    return clean_title(" ".join(pieces))
+
+
+def parse_nnm_peer_metric(text: str) -> int | None:
+    up = re.search(r"(?<!\d)(\d{1,6})\s*(?:↑|сид(?:ы|ов|еры?)?|seed(?:er)?s?)", text, re.I)
+    down = re.search(r"(?<!\d)(\d{1,6})\s*(?:↓|лич(?:и|ей|еры?)?|leech(?:er)?s?)", text, re.I)
+    values = []
+    if up:
+        values.append(int(up.group(1)))
+    if down:
+        values.append(int(down.group(1)))
+    if values:
+        return sum(values)
+
+    # NNM normally renders peer counters around arrows; tolerate whitespace and image-alt text.
+    pair = re.search(
+        r"Размер\s+[\d.,]+\s*(?:KB|MB|GB|TB).*?\|\s*(\d{1,6}).{0,80}?\|\s*(\d{1,6})",
+        text,
+        re.I,
+    )
+    if pair:
+        return int(pair.group(1)) + int(pair.group(2))
+    return None
+
+
+def parse_nnm_category(url: str, kind: str, label: str) -> list[Item]:
+    page, _ = fetch_first([url])
+    soup = BeautifulSoup(page, "html.parser")
+    items: list[Item] = []
+    for heading in soup.find_all("h2"):
+        title = clean_title(heading.get_text(" ", strip=True))
+        if not YEAR_RE.search(title) or not looks_like_video(title):
+            continue
+        block_text = nearby_text_after_heading(heading)
+        metric = parse_nnm_peer_metric(block_text)
+        if not metric or metric <= 0:
+            continue
+        items.append(Item(
+            title=title,
+            year=extract_year(title),
+            kind=kind,
+            source="NNM-Club",
+            metric_name="активных пиров",
+            metric_value=metric,
+        ))
+    print(f"NNM {label}: {len(items)} parsed", file=sys.stderr)
+    return items
+
+
+def parse_nnmclub() -> list[Item]:
+    categories = [
+        ("https://nnmclub.to/portal.php?c=10", "movie", "новинки кино"),
+        ("https://nnmclub.to/portal.php?c=11", "movie", "HD/UHD кино"),
+        ("https://nnmclub.to/forum/portal.php?c=6", "movie", "зарубежное кино"),
+        ("https://nnmclub.to/portal.php?c=13", "movie", "наше кино"),
+        ("https://nnmclub.to/portal.php?c=3", "series", "зарубежные сериалы"),
+        ("https://nnmclub.to/portal.php?c=4", "series", "наши сериалы"),
+    ]
+    items: list[Item] = []
+    failures = 0
+    for url, kind, label in categories:
+        try:
+            items.extend(parse_nnm_category(url, kind, label))
+        except Exception as exc:
+            failures += 1
+            print(f"NNM {label} failed: {exc}", file=sys.stderr)
+    if not items:
+        raise RuntimeError(f"all NNM category parsers failed or returned 0 ({failures} failures)")
     return dedupe_source(items)
 
 
@@ -176,7 +282,6 @@ def parse_kinozal() -> list[Item]:
     ])
     soup = BeautifulSoup(page, "html.parser")
     items: list[Item] = []
-
     for table in soup.find_all("table"):
         rows = table.find_all("tr")
         if not rows:
@@ -193,13 +298,10 @@ def parse_kinozal() -> list[Item]:
             if not candidates:
                 continue
             title = max(candidates, key=len)
+            if not looks_like_video(title):
+                continue
             lower = title.lower()
-            series = bool(re.search(r"\[(?:s\d|\d{1,2}[xх]\d|\d+\s+из\s+\d)", lower, re.I))
-            # Only video-looking releases; reject obvious audio/books/games/sport.
-            if not re.search(r"(?i)(web|bd|blu|hdrip|dvdrip|hdtv|iptv|1080|720|2160|4k)", title):
-                continue
-            if re.search(r"(?i)\b(mp3|flac|fb2|pdf|djvu|pc\s*\||repack\s+от|ufc|футбол|бокс\.)\b", title):
-                continue
+            series = bool(re.search(r"(?:\[(?:s\d|\d{1,2}[xх]\d)|сезон|серии)", lower, re.I))
             nums = [int(x) for x in re.findall(r"\d+", cells[-1].get_text(" ", strip=True))]
             nums = [n for n in nums if 0 < n < 1_000_000]
             if not nums:
@@ -224,7 +326,7 @@ def dedupe_source(items: list[Item]) -> list[Item]:
         prev = best.get(key)
         if prev is None or item.metric_value > prev.metric_value:
             best[key] = item
-    return sorted(best.values(), key=lambda x: x.metric_value, reverse=True)[:200]
+    return sorted(best.values(), key=lambda x: x.metric_value, reverse=True)[:300]
 
 
 def rank_items(items: list[Item]) -> list[Item]:
@@ -252,17 +354,22 @@ def same_work(a: Item, b: Item) -> bool:
     return ca == cb or SequenceMatcher(None, ca, cb).ratio() >= 0.92
 
 
+def metric_note(item: Item) -> str:
+    shown = item.metric_display or f"{item.metric_value} {item.metric_name}"
+    return f"{item.source}: {shown}"
+
+
 def merge_sources(items: list[Item]) -> list[Item]:
     merged: list[Item] = []
     for item in sorted(items, key=lambda x: x.aggregate_score, reverse=True):
         target = next((m for m in merged if same_work(m, item)), None)
         if not target:
-            item.source_notes = f"{item.source}: {item.metric_value} {item.metric_name}"
+            item.source_notes = metric_note(item)
             merged.append(item)
             continue
         target.aggregate_score += item.aggregate_score * 0.85
         target.source_count += 1
-        target.source_notes += f"; {item.source}: {item.metric_value} {item.metric_name}"
+        target.source_notes += f"; {metric_note(item)}"
         if len(base_title(item.title)) < len(base_title(target.title)):
             target.title = item.title
             target.year = item.year or target.year
@@ -288,7 +395,7 @@ def build_report(items: list[Item], errors: list[str]) -> str:
     if movies:
         lines.append(f"🔥 ФИЛЬМЫ — ТОП-{min(TOP_N, len(movies))}")
         for i, x in enumerate(movies, 1):
-            multi = f" · {x.source_count} релиза/ист." if x.source_count > 1 else ""
+            multi = f" · {x.source_count} источника/релиза" if x.source_count > 1 else ""
             lines.append(f"{i}. {safe_display_title(x.title)}{multi}")
             lines.append(f"   {x.source_notes}")
     else:
@@ -298,7 +405,7 @@ def build_report(items: list[Item], errors: list[str]) -> str:
     if series:
         lines.append(f"📺 СЕРИАЛЫ — ТОП-{min(TOP_N, len(series))}")
         for i, x in enumerate(series, 1):
-            multi = f" · {x.source_count} релиза/ист." if x.source_count > 1 else ""
+            multi = f" · {x.source_count} источника/релиза" if x.source_count > 1 else ""
             lines.append(f"{i}. {safe_display_title(x.title)}{multi}")
             lines.append(f"   {x.source_notes}")
     else:
@@ -357,7 +464,11 @@ def send_telegram(text: str) -> None:
 def main() -> int:
     all_items: list[Item] = []
     errors: list[str] = []
-    sources = [("Rutor", parse_rutor), ("Kinozal", parse_kinozal)]
+    sources = [
+        ("Rutor", parse_rutor),
+        ("NNM-Club", parse_nnmclub),
+        ("Kinozal", parse_kinozal),
+    ]
     for name, parser in sources:
         try:
             source_items = parser()
