@@ -19,6 +19,9 @@ var FALLBACK_PROMPT_MS=25000;
 var FALLBACK_AUTOPLAY_MS=7000;
 var CREDITS_AUTOPLAY_SECONDS=7;
 var AUTOPLAY_KEY='homecinema.autoplay.next';
+var HANDOFF_BACK_RETRY_MS=80;
+var HANDOFF_COMPLETE_DELAY_MS=550;
+var HANDOFF_MAX_BACK_ATTEMPTS=3;
 
 function $(selector,root){return (root||document).querySelector(selector)}
 function trim(v){return String(v||'').replace(/^\s+|\s+$/g,'')}
@@ -181,16 +184,25 @@ function launchHiddenPlay(item){
   try{tmp.click()}catch(_){}
   setTimeout(function(){try{if(tmp.parentNode)tmp.parentNode.removeChild(tmp)}catch(_){}},40);
 }
+function persistHandoffCompletion(data){
+  var source=trim(data&&data.fromSource||''),duration=Math.max(0,Number(data&&data.duration||0));
+  if(!source||duration<=1500)return Promise.resolve(false);
+  return window.fetch(apiBase()+'/api/progress',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({source_url:source,position_ms:Math.round(duration),duration_ms:Math.round(duration),completed:1})
+  }).then(function(resp){return !!(resp&&resp.ok)}).catch(function(){return false});
+}
 function scheduleHandoffLaunch(){
   if(!handoff||playerVisible()||handoffLaunchTimer)return;
   handoffLaunchTimer=setTimeout(function(){
     handoffLaunchTimer=null;
     if(!handoff||playerVisible())return;
-    var item=handoff.item;
+    var pending=handoff,item=pending.item;
     handoff=null;
     var r=runtime();if(r)r.lastPlaybackRatio=0;
-    launchHiddenPlay(item);
-  },160);
+    persistHandoffCompletion(pending).then(function(){launchHiddenPlay(item)},function(){launchHiddenPlay(item)});
+  },HANDOFF_COMPLETE_DELAY_MS);
 }
 function finishCurrentForHandoff(){
   var times=playbackTimes();
@@ -205,14 +217,46 @@ function finishCurrentForHandoff(){
     return false;
   }
 }
+function dispatchBackForHandoff(){
+  var evt=null;
+  try{
+    evt=document.createEvent('Event');
+    evt.initEvent('keydown',true,true);
+    evt.keyCode=10009;
+    evt.which=10009;
+    window.dispatchEvent(evt);
+    return true;
+  }catch(_){}
+  try{
+    evt=new KeyboardEvent('keydown',{bubbles:true,cancelable:true,keyCode:10009,which:10009});
+    window.dispatchEvent(evt);
+    return true;
+  }catch(_){}
+  return false;
+}
+function closeCurrentForHandoff(attempt){
+  if(!handoff||!playerVisible()){scheduleHandoffLaunch();return}
+  attempt=Number(attempt||0);
+  dispatchBackForHandoff();
+  if(!playerVisible()){scheduleHandoffLaunch();return}
+  if(attempt+1<HANDOFF_MAX_BACK_ATTEMPTS){
+    setTimeout(function(){closeCurrentForHandoff(attempt+1)},HANDOFF_BACK_RETRY_MS);
+    return;
+  }
+  // Samsung fallback only: preserve the previous end-seek path if synthetic Back
+  // cannot unwind an open settings/menu layer on a particular firmware build.
+  finishCurrentForHandoff();
+}
 function handoffToNext(){
   var source=currentSource(),item=nextItem;
   if(!source||!item||!item.source_url){skipCredits();return}
   if(typeof webapis==='undefined'||!webapis.avplay)return;
-  handoff={fromSource:source,item:item,requestedAt:Date.now()};
+  var times=playbackTimes();
+  handoff={fromSource:source,item:item,duration:times.duration,requestedAt:Date.now()};
   dismissedSource=source;
   hidePrompts();
-  if(!finishCurrentForHandoff())handoff=null;
+  var r=runtime();if(r)r.lastPlaybackRatio=0;
+  closeCurrentForHandoff(0);
 }
 function skipCredits(){
   var source=currentSource(),r=runtime();
@@ -321,5 +365,12 @@ window.HOME_CINEMA_RC335={
   fetchNext:fetchNext,
   fallbackPromptMs:FALLBACK_PROMPT_MS,
   fallbackAutoplayMs:FALLBACK_AUTOPLAY_MS
+};
+window.HOME_CINEMA_RC338={
+  marker:'rc3.38-atomic-next-handoff',
+  handoffToNext:handoffToNext,
+  closeCurrentForHandoff:closeCurrentForHandoff,
+  completionDelayMs:HANDOFF_COMPLETE_DELAY_MS,
+  maxBackAttempts:HANDOFF_MAX_BACK_ATTEMPTS
 };
 })();
