@@ -68,6 +68,7 @@ jobs:
           node --check tools/rc313-seek-surface-smoke.js
           node --check tools/rc314-audio-metadata-smoke.js
           node --check tools/rc315-skip-credits-smoke.js
+          node --check tools/rc335-smart-next-smoke.js
           node --check tools/rc316-regression-smoke.js
           node --check tools/rc317-regression-smoke.js
           node --check tools/rc318-continue-started-at-smoke.js
@@ -114,6 +115,9 @@ jobs:
 
       - name: TV RC3.15 skip credits gate
         run: node tools/rc315-skip-credits-smoke.js
+
+      - name: TV RC3.35 smart credits and next episode gate
+        run: node tools/rc335-smart-next-smoke.js
 
       - name: TV RC3.16 regression gate
         run: node tools/rc316-regression-smoke.js
