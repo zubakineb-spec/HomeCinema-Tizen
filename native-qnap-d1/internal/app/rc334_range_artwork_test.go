@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -188,7 +189,11 @@ func TestRC334RangeFailurePersistsExactChunkDiagnostic(t *testing.T) {
 		t.Fatalf("unexpected response body: %s", w.Body.String())
 	}
 
-	text := readTestFile(t, filepath.Join(dataDir, rc332ImageTransportLog))
+	data, err := os.ReadFile(filepath.Join(dataDir, rc332ImageTransportLog))
+	if err != nil {
+		t.Fatalf("read diagnostic: %v", err)
+	}
+	text := string(data)
 	for _, want := range []string{
 		"TMDB image range download failed",
 		"TMDB range start=1 want=0",
@@ -198,26 +203,4 @@ func TestRC334RangeFailurePersistsExactChunkDiagnostic(t *testing.T) {
 			t.Fatalf("diagnostic missing %q: %s", want, text)
 		}
 	}
-}
-
-func readTestFile(t *testing.T, path string) string {
-	t.Helper()
-	data, err := io.ReadAll(mustOpenTestFile(t, path))
-	if err != nil {
-		t.Fatal(err)
-	}
-	return string(data)
-}
-
-func mustOpenTestFile(t *testing.T, path string) io.ReadCloser {
-	t.Helper()
-	f, err := openTestFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return f
-}
-
-var openTestFile = func(path string) (io.ReadCloser, error) {
-	return http.Dir("/").Open(strings.TrimPrefix(path, "/"))
 }
