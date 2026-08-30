@@ -18,8 +18,10 @@ if(!profile.includes('const mediaProfileVersion = 315'))fail('profile version 31
 if(!profile.includes('chapter=start_time,end_time:chapter_tags=title'))fail('ffprobe chapter extraction missing');
 if(!profile.includes('detectChapterMarkers'))fail('chapter marker detector missing');
 if(!profile.includes('isCreditsChapter'))fail('credits chapter detector missing');
-if(!scanner.includes('profile.ProfileVersion < rc316ProfileVersion'))fail('legacy profile reprobe gate missing');
-if(!ffmpeg.includes('const rc316ProfileVersion = 316'))fail('RC3.16 profile version missing');
+if(!profile.includes('creditsStart == 0 || start < creditsStart'))fail('earliest end-credits chapter selection missing');
+if(!scanner.includes('profile.ProfileVersion < creditsMarkerProfileVersion'))fail('credits marker reprofile gate missing');
+if(!ffmpeg.includes('const rc316ProfileVersion = 316'))fail('RC3.16 profile version baseline missing');
+if(!ffmpeg.includes('const creditsMarkerProfileVersion = 317'))fail('credits marker profile version 317 missing');
 if(!index.includes('css/rc315-skip-credits.css'))fail('RC3.15 CSS not loaded');
 if(!index.includes('js/rc315-skip-credits.js'))fail('RC3.15 JS not loaded');
 if(index.indexOf('js/rc315-skip-credits.js')>index.indexOf('js/app.js'))fail('RC3.15 skip handler must load before app.js');
@@ -28,8 +30,9 @@ for(const marker of ['position:absolute','right:72px','bottom:118px','min-width:
 if(!seek.includes('function clearScrubVisuals()')||!seek.includes('seekWatchdog=nativeSetTimeout(done,1800)'))fail('RC3.13 seek fix lost');
 if(!audio.includes('HOME_CINEMA_AUDIO_PROFILES')||!audio.includes('audio_tracks'))fail('RC3.14 audio metadata lost');
 
-console.log('PASS: ffprobe chapter markers feed credits_start_ms');
-console.log('PASS: legacy profiles are reprofiled once for RC3.15/RC3.16');
-console.log('PASS: Skip Credits is episode-only and reuses RC3.7 next-episode flow');
+console.log('PASS: ffprobe/ffmpeg chapter markers feed credits_start_ms');
+console.log('PASS: first qualifying end-credits chapter wins over later closing/outro chapters');
+console.log('PASS: cached profile 316 is reprofiled once to profile 317');
+console.log('PASS: Skip Credits remains episode-only and preserves player ownership');
 console.log('PASS: RC3.13 seek fix and RC3.14 compact audio remain in the combined release');
 console.log('HOME_CINEMA_RC315_SKIP_CREDITS_SMOKE=PASS');
