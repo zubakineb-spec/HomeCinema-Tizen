@@ -75,6 +75,43 @@ function handleDedicatedMediaKey(code,e){
   return false;
 }
 
+// RC3.37: /api/next is requested once by the smart-credits module. A short
+// QNAP restart used to turn one failed request into a permanent "no next
+// episode" result for the current playback session. Keep that one request
+// pending and retry only the next-episode endpoint until the backend is back.
+var NEXT_RETRY_MS=3000;
+var nextFetchGeneration=0;
+function isNextEpisodeRequest(input){
+  var url='';
+  if(typeof input==='string')url=input;
+  else if(input&&typeof input.url==='string')url=input.url;
+  return url.indexOf('/api/next?source_url=')>=0;
+}
+function installNextEpisodeFetchRetry(){
+  if(typeof window.fetch!=='function'||window.fetch.__homeCinemaRC337Wrapped)return;
+  var nativeFetch=window.fetch;
+  var wrapped=function(input,init){
+    if(!isNextEpisodeRequest(input))return nativeFetch.call(window,input,init);
+    var generation=++nextFetchGeneration;
+    return new Promise(function(resolve,reject){
+      function retry(){setTimeout(attempt,NEXT_RETRY_MS)}
+      function attempt(){
+        if(generation!==nextFetchGeneration){reject(new Error('next request superseded'));return}
+        var request;
+        try{request=nativeFetch.call(window,input,init)}catch(_){retry();return}
+        Promise.resolve(request).then(function(resp){
+          if(resp&&resp.ok){resolve(resp);return}
+          retry();
+        },function(){retry()});
+      }
+      attempt();
+    });
+  };
+  wrapped.__homeCinemaRC337Wrapped=true;
+  window.fetch=wrapped;
+}
+installNextEpisodeFetchRetry();
+
 window.addEventListener('keydown',function(e){
   var code=Number(e.keyCode||e.which||0);
   if(aboutOpen()){
@@ -94,5 +131,9 @@ document.addEventListener('click',function(e){
   if(back){consume(e);closeAbout();return}
 },true);
 
+window.HOME_CINEMA_RC337_NEXT_RETRY={
+  marker:'rc3.37-next-fetch-retry',
+  retryMs:NEXT_RETRY_MS
+};
 window.HOME_CINEMA_RC_RELEASE=true;
 })();
