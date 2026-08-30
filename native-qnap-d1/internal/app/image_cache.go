@@ -16,8 +16,10 @@ import (
 )
 
 const (
-	maxCachedImageBytes     = 20 << 20
-	tmdbImageRequestTimeout = 60 * time.Second
+	maxCachedImageBytes          = 20 << 20
+	tmdbImageRequestTimeout      = 60 * time.Second
+	tmdbImageRangeChunkBytes     = int64(8 << 10)
+	tmdbImageRangeRequestTimeout = 20 * time.Second
 )
 
 func cacheImageExtension(u *url.URL) string {
@@ -86,10 +88,12 @@ func serveCachedImage(w http.ResponseWriter, r *http.Request, path string) bool 
 }
 
 // RC3.28: artwork downloads must use the same verified TMDB transport as
-// metadata calls so QNAP DNS/TLS fallbacks stay active. RC3.33 keeps that
-// transport but gives artwork its own longer whole-request budget because
-// http.Client.Timeout includes response-body reads. Metadata remains at the
-// original 20-second budget.
+// metadata calls so QNAP DNS/TLS fallbacks stay active. RC3.33 kept that
+// transport with a longer whole-request budget. RC3.34 adds a dedicated range
+// client: physical QNAP diagnostics proved the CDN stalls a continuous body
+// after one 16 KiB TLS application record, while independent 8 KiB HTTP Range
+// requests all complete. Each range request still uses the verified TMDB
+// transport, seed-first routing, SNI and certificate validation.
 func (s *Server) tmdbImageHTTPClient() *http.Client {
 	if s != nil && s.tmdb != nil && s.tmdb.client != nil {
 		clone := *s.tmdb.client
@@ -99,6 +103,158 @@ func (s *Server) tmdbImageHTTPClient() *http.Client {
 	client := newTMDBHTTPClient()
 	client.Timeout = tmdbImageRequestTimeout
 	return client
+}
+
+func (s *Server) tmdbImageRangeHTTPClient() *http.Client {
+	if s != nil && s.tmdb != nil && s.tmdb.client != nil {
+		clone := *s.tmdb.client
+		clone.Timeout = tmdbImageRangeRequestTimeout
+		return &clone
+	}
+	client := newTMDBHTTPClient()
+	client.Timeout = tmdbImageRangeRequestTimeout
+	return client
+}
+
+func parseTMDBContentRange(value string) (start, end, total int64, err error) {
+	value = strings.TrimSpace(value)
+	if _, err = fmt.Sscanf(value, "bytes %d-%d/%d", &start, &end, &total); err != nil {
+		return 0, 0, 0, fmt.Errorf("invalid TMDB Content-Range %q: %w", value, err)
+	}
+	if start < 0 || end < start || total <= 0 || end >= total {
+		return 0, 0, 0, fmt.Errorf("invalid TMDB Content-Range bounds %q", value)
+	}
+	return start, end, total, nil
+}
+
+func newTMDBImageRangeRequest(u *url.URL, start, end int64) (*http.Request, error) {
+	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "HomeCinema/0.3.18 QNAP-D1")
+	req.Header.Set("Accept-Encoding", "identity")
+	req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", start, end))
+	// The physical QNAP workaround depends on a fresh TLS stream per chunk.
+	// The direct fallback transport already disables keep-alives; Close also
+	// preserves that contract for injected/test transports and future changes.
+	req.Close = true
+	return req, nil
+}
+
+func readTMDBFullImageResponse(resp *http.Response) ([]byte, string, error) {
+	if resp == nil {
+		return nil, "", fmt.Errorf("nil TMDB image response")
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, "", fmt.Errorf("TMDB image HTTP %s", resp.Status)
+	}
+	if resp.ContentLength > maxCachedImageBytes {
+		return nil, "", fmt.Errorf("TMDB image too large: %d", resp.ContentLength)
+	}
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxCachedImageBytes+1))
+	if err != nil {
+		return nil, "", fmt.Errorf("TMDB image body read failed after %d bytes (content_length=%d): %w", len(data), resp.ContentLength, err)
+	}
+	if len(data) > maxCachedImageBytes {
+		return nil, "", fmt.Errorf("TMDB image too large after read: %d", len(data))
+	}
+	if len(data) == 0 {
+		return nil, "", fmt.Errorf("TMDB image empty")
+	}
+	return data, strings.TrimSpace(resp.Header.Get("Content-Type")), nil
+}
+
+func readTMDBRangeResponse(resp *http.Response, expectedStart, requestedEnd int64) ([]byte, int64, int64, int64, string, error) {
+	if resp == nil {
+		return nil, 0, 0, 0, "", fmt.Errorf("nil TMDB range response")
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusPartialContent {
+		return nil, 0, 0, 0, "", fmt.Errorf("TMDB range HTTP %s", resp.Status)
+	}
+	start, end, total, err := parseTMDBContentRange(resp.Header.Get("Content-Range"))
+	if err != nil {
+		return nil, 0, 0, 0, "", err
+	}
+	if start != expectedStart {
+		return nil, 0, 0, 0, "", fmt.Errorf("TMDB range start=%d want=%d", start, expectedStart)
+	}
+	if end > requestedEnd {
+		return nil, 0, 0, 0, "", fmt.Errorf("TMDB range end=%d exceeds requested=%d", end, requestedEnd)
+	}
+	if total > maxCachedImageBytes {
+		return nil, 0, 0, 0, "", fmt.Errorf("TMDB image too large: %d", total)
+	}
+	expectedBytes := end - start + 1
+	data, err := io.ReadAll(io.LimitReader(resp.Body, expectedBytes+1))
+	if err != nil {
+		return nil, 0, 0, 0, "", fmt.Errorf("TMDB range %d-%d body read failed after %d bytes: %w", start, end, len(data), err)
+	}
+	if int64(len(data)) != expectedBytes {
+		return nil, 0, 0, 0, "", fmt.Errorf("TMDB range %d-%d bytes=%d want=%d", start, end, len(data), expectedBytes)
+	}
+	return data, start, end, total, strings.TrimSpace(resp.Header.Get("Content-Type")), nil
+}
+
+func (s *Server) downloadTMDBImageByRange(u *url.URL) ([]byte, string, error) {
+	client := s.tmdbImageRangeHTTPClient()
+	firstEnd := tmdbImageRangeChunkBytes - 1
+	firstReq, err := newTMDBImageRangeRequest(u, 0, firstEnd)
+	if err != nil {
+		return nil, "", err
+	}
+	firstResp, err := client.Do(firstReq)
+	if err != nil {
+		return nil, "", fmt.Errorf("TMDB first range request failed: %w", err)
+	}
+
+	// Standards-compliant servers may ignore Range and return a complete 200.
+	// Keep the RC3.33 full-body path as a compatibility fallback. BunnyCDN on the
+	// target QNAP returns 206, so production hardware takes the range path below.
+	if firstResp.StatusCode == http.StatusOK {
+		return readTMDBFullImageResponse(firstResp)
+	}
+
+	firstData, _, firstGotEnd, total, contentType, err := readTMDBRangeResponse(firstResp, 0, firstEnd)
+	if err != nil {
+		return nil, "", err
+	}
+	assembled := make([]byte, 0, int(total))
+	assembled = append(assembled, firstData...)
+
+	for start := firstGotEnd + 1; start < total; {
+		end := start + tmdbImageRangeChunkBytes - 1
+		if end >= total {
+			end = total - 1
+		}
+		req, reqErr := newTMDBImageRangeRequest(u, start, end)
+		if reqErr != nil {
+			return nil, "", reqErr
+		}
+		resp, doErr := client.Do(req)
+		if doErr != nil {
+			return nil, "", fmt.Errorf("TMDB range %d-%d request failed: %w", start, end, doErr)
+		}
+		chunk, gotStart, gotEnd, gotTotal, _, readErr := readTMDBRangeResponse(resp, start, end)
+		if readErr != nil {
+			return nil, "", readErr
+		}
+		if gotTotal != total {
+			return nil, "", fmt.Errorf("TMDB range total changed: %d -> %d", total, gotTotal)
+		}
+		if gotStart != start || gotEnd < gotStart {
+			return nil, "", fmt.Errorf("TMDB range made no progress: got=%d-%d want_start=%d", gotStart, gotEnd, start)
+		}
+		assembled = append(assembled, chunk...)
+		start = gotEnd + 1
+	}
+
+	if int64(len(assembled)) != total {
+		return nil, "", fmt.Errorf("TMDB assembled image bytes=%d want=%d", len(assembled), total)
+	}
+	return assembled, contentType, nil
 }
 
 func (s *Server) imageCache(w http.ResponseWriter, r *http.Request) {
@@ -121,50 +277,17 @@ func (s *Server) imageCache(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	client := s.tmdbImageHTTPClient()
-	req, _ := http.NewRequest(http.MethodGet, u.String(), nil)
-	req.Header.Set("User-Agent", "HomeCinema/0.3.18 QNAP-D1")
-	resp, err := client.Do(req)
+	data, contentType, err := s.downloadTMDBImageByRange(u)
 	if err != nil {
-		// RC3.31 keeps the complete error on the standard logger. RC3.32 also
-		// persists it independently in the data directory because the target QNAP
-		// proved that later standard-log lines can be unobservable after startup.
-		log.Printf("TMDB image fetch failed host=%s path=%s: %v", u.Hostname(), u.EscapedPath(), err)
-		s.recordTMDBImageTransportFailure(u, err)
-		jsonErr(w, http.StatusBadGateway, "TMDB image unavailable")
-		return
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		jsonErr(w, http.StatusBadGateway, "TMDB image HTTP "+resp.Status)
-		return
-	}
-	if resp.ContentLength > maxCachedImageBytes {
-		jsonErr(w, http.StatusBadGateway, "TMDB image too large")
-		return
-	}
-	data, err := io.ReadAll(io.LimitReader(resp.Body, maxCachedImageBytes+1))
-	if err != nil {
-		// RC3.33: the physical QNAP proved that DNS, SNI and certificate
-		// verification can succeed while the old 20-second whole-client timeout
-		// expires during body reading. Persist the exact read failure and number of
-		// bytes already received so a future network failure is unambiguous.
-		readErr := fmt.Errorf("TMDB image body read failed after %d bytes (content_length=%d): %w", len(data), resp.ContentLength, err)
-		log.Printf("%v", readErr)
-		s.recordTMDBImageTransportFailure(u, readErr)
+		// RC3.34: persist the exact failed chunk/range while keeping the public API
+		// response stable for the TV client.
+		rangeErr := fmt.Errorf("TMDB image range download failed: %w", err)
+		log.Printf("%v", rangeErr)
+		s.recordTMDBImageTransportFailure(u, rangeErr)
 		jsonErr(w, http.StatusBadGateway, "TMDB image read failed")
-		return
-	}
-	if len(data) > maxCachedImageBytes {
-		jsonErr(w, http.StatusBadGateway, "TMDB image read failed")
-		return
-	}
-	if len(data) == 0 {
-		jsonErr(w, http.StatusBadGateway, "TMDB image empty")
 		return
 	}
 
-	contentType := strings.TrimSpace(resp.Header.Get("Content-Type"))
 	if !strings.HasPrefix(strings.ToLower(contentType), "image/") {
 		contentType = http.DetectContentType(data)
 	}
