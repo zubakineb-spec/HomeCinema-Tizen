@@ -53,8 +53,10 @@ if(!backendTest.includes('TestNextEpisodeAPI'))fail('backend next-episode contra
 for(const marker of [
   'function clearScrubVisuals()',
   'seekWatchdog=nativeSetTimeout(done,1800)',
-  'function startScrub(direction)',
-  'function commitScrub()'
+  'function handleScrubArrow(direction)',
+  'function commitScrub(immediateFeedback)',
+  'SCRUB_FRAME_MS=80',
+  'SCRUB_STEP=10000'
 ])if(!seek.includes(marker))fail('RC3.25 player navigation/scrub baseline lost: '+marker);
 
 if(smart.includes('jumpForward(')||smart.includes('jumpBackward('))fail('RC3.35 must not take RC3.25 arrow/scrub ownership');
