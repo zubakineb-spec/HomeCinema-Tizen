@@ -12,6 +12,7 @@ import (
 )
 
 const rc316ProfileVersion = 316
+const creditsMarkerProfileVersion = 317
 
 var (
 	ffmpegDurationRE = regexp.MustCompile(`Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)`)
@@ -53,7 +54,7 @@ func ffmpegLayout(rest string) (int, string) {
 }
 
 func parseFFmpegProfile(path string, raw []byte) MediaProfile {
-	profile := MediaProfile{ProfileVersion: rc316ProfileVersion, Container: extensionContainer(path), Probed: true}
+	profile := MediaProfile{ProfileVersion: creditsMarkerProfileVersion, Container: extensionContainer(path), Probed: true}
 	durationMS := parseFFmpegDurationMS(string(raw))
 	var chapters []profileProbeChapter
 	var audioCodecs []string
@@ -148,12 +149,12 @@ func parseFFmpegProfile(path string, raw []byte) MediaProfile {
 func profileLocalFileRC316(path string) MediaProfile {
 	if tool("ffprobe") {
 		profile := profileLocalFile(path)
-		profile.ProfileVersion = rc316ProfileVersion
+		profile.ProfileVersion = creditsMarkerProfileVersion
 		return profile
 	}
 	if !tool("ffmpeg") {
 		profile := profileLocalFile(path)
-		profile.ProfileVersion = rc316ProfileVersion
+		profile.ProfileVersion = creditsMarkerProfileVersion
 		return profile
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
@@ -162,7 +163,7 @@ func profileLocalFileRC316(path string) MediaProfile {
 	out, _ := cmd.CombinedOutput()
 	if len(out) == 0 {
 		profile := profileLocalFile(path)
-		profile.ProfileVersion = rc316ProfileVersion
+		profile.ProfileVersion = creditsMarkerProfileVersion
 		return profile
 	}
 	return parseFFmpegProfile(path, out)
