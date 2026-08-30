@@ -16,6 +16,11 @@ $Wgt = Join-Path $Desktop "HomeCinema-Tizen-v$ExpectedVersion-$RC.wgt"
 $Manifest = [System.IO.Path]::ChangeExtension($Wgt, '.json')
 $Log = Join-Path $Desktop 'HomeCinema-RC3.35-TV-INSTALL.log'
 
+# Keep this PowerShell source ASCII-only so Windows PowerShell 5.1 can parse it
+# correctly even when a bootstrap downloads it as UTF-8 without BOM.
+$NextEpisodeText = ConvertFrom-Json '"\u25B6 \u0421\u043b\u0435\u0434\u0443\u044e\u0449\u0430\u044f \u0441\u0435\u0440\u0438\u044f"'
+$WatchCreditsText = ConvertFrom-Json '"\u0421\u043c\u043e\u0442\u0440\u0435\u0442\u044c \u0442\u0438\u0442\u0440\u044b"'
+
 function Fail([string]$Message) { throw $Message }
 function CheckMarker([string]$Text,[string]$Marker,[string]$Name) {
     if ($Text -notmatch [regex]::Escape($Marker)) { Fail "$Name=$Marker" }
@@ -65,8 +70,8 @@ try {
         'credits_start_ms',
         '/api/next?source_url=',
         'rc335NextEpisodePanel',
-        '▶ Следующая серия',
-        'Смотреть титры',
+        $NextEpisodeText,
+        $WatchCreditsText,
         'function handoffToNext()',
         'data-play-source',
         'lastPlaybackRatio=1',
@@ -125,7 +130,7 @@ try {
         $wgtSmart = ReadZipText 'js/rc315-skip-credits.js'
         $wgtCss = ReadZipText 'css/rc315-skip-credits.css'
         $wgtNav = ReadZipText 'js/rc32-player-navigation.js'
-        foreach ($marker in @('/api/next?source_url=','rc335NextEpisodePanel','▶ Следующая серия','Смотреть титры','function handoffToNext()','HOME_CINEMA_RC335','rc3.35-smart-credits-next')) {
+        foreach ($marker in @('/api/next?source_url=','rc335NextEpisodePanel',$NextEpisodeText,$WatchCreditsText,'function handoffToNext()','HOME_CINEMA_RC335','rc3.35-smart-credits-next')) {
             CheckMarker $wgtSmart $marker 'WGT_RC335_MARKER_MISSING'
         }
         foreach ($marker in @('.rc335-next-episode-panel','.rc335-next-primary','.rc335-next-secondary')) {
