@@ -20,8 +20,8 @@ func TestRC316FFmpegProfileAudioAndCredits(t *testing.T) {
         title           : Original
 `)
 	p := parseFFmpegProfile("sample.mkv", raw)
-	if p.ProfileVersion != rc316ProfileVersion {
-		t.Fatalf("profile version=%d", p.ProfileVersion)
+	if p.ProfileVersion != creditsMarkerProfileVersion {
+		t.Fatalf("profile version=%d want %d", p.ProfileVersion, creditsMarkerProfileVersion)
 	}
 	if !p.Probed || p.VideoCodec != "h264" || p.Width != 1920 || p.Height != 1080 {
 		t.Fatalf("video profile=%+v", p)
