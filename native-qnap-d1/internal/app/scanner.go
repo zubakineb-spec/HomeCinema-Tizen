@@ -38,10 +38,10 @@ func skipQNAPDir(name string) bool {
 }
 
 func reusableMediaProfile(profile MediaProfile) bool {
-	// RC3.16 upgrades the profile to use ffmpeg metadata when ffprobe is absent.
-	// Reprobe existing RC3.15 profiles exactly once so QNAP D1 installations
-	// that have ffmpeg but no ffprobe still gain audio attribution and chapters.
-	if profile.ProfileVersion < rc316ProfileVersion {
+	// RC3.16 upgraded the profile to use ffmpeg metadata when ffprobe is absent.
+	// Profile 317 fixes credits chapter selection, so older cached profiles must
+	// be regenerated once to replace late/end-of-credits markers.
+	if profile.ProfileVersion < creditsMarkerProfileVersion {
 		return false
 	}
 	if profile.Probed && len(profile.AudioCodecs) > 0 && len(profile.AudioTracks) == 0 {
