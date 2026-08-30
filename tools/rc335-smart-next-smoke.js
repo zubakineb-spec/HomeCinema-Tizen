@@ -4,6 +4,7 @@ const fs=require('fs');
 function fail(message){console.error('FAIL: '+message);process.exit(1)}
 
 const index=fs.readFileSync('tv-app/index.html','utf8');
+const app=fs.readFileSync('tv-app/js/app.js','utf8');
 const smart=fs.readFileSync('tv-app/js/rc315-skip-credits.js','utf8');
 const css=fs.readFileSync('tv-app/css/rc315-skip-credits.css','utf8');
 const rc37=fs.readFileSync('tv-app/js/rc37-enhancements.js','utf8');
@@ -50,6 +51,28 @@ if(!release.includes("},function(){retry()});"))fail('RC3.37 must retry rejected
 if(!release.includes("if(!isNextEpisodeRequest(input))return nativeFetch.call(window,input,init);"))fail('RC3.37 must leave non-next fetch traffic untouched');
 
 for(const marker of [
+  'HANDOFF_BACK_RETRY_MS=80',
+  'HANDOFF_COMPLETE_DELAY_MS=550',
+  'HANDOFF_MAX_BACK_ATTEMPTS=3',
+  'function persistHandoffCompletion(data)',
+  'completed:1',
+  'function dispatchBackForHandoff()',
+  'evt.keyCode=10009',
+  'function closeCurrentForHandoff(attempt)',
+  'closeCurrentForHandoff(0)',
+  'rc3.38-atomic-next-handoff',
+  'HOME_CINEMA_RC338'
+])if(!smart.includes(marker))fail('RC3.38 atomic handoff marker missing: '+marker);
+
+if(!app.includes("if(state.player){toast('Видео уже запускается');return}"))fail('app player ownership guard unexpectedly changed');
+const handoffBody=(smart.split('function handoffToNext(){')[1]||'').split('function skipCredits(){')[0]||'';
+if(!handoffBody.includes('closeCurrentForHandoff(0)'))fail('RC3.38 handoff must unwind current player before launching next');
+if(handoffBody.includes('finishCurrentForHandoff()'))fail('RC3.38 primary handoff must not depend on end seek');
+const closeBody=(smart.split('function closeCurrentForHandoff(attempt){')[1]||'').split('function handoffToNext(){')[0]||'';
+if(!closeBody.includes('dispatchBackForHandoff()'))fail('RC3.38 must use app-owned Back path to clear state.player');
+if(!closeBody.includes('finishCurrentForHandoff()'))fail('legacy end-seek must remain only as Samsung firmware fallback');
+
+for(const marker of [
   '.rc315-skip-credits{',
   'position:absolute',
   'right:72px',
@@ -75,14 +98,16 @@ for(const marker of [
   'SCRUB_STEP=10000'
 ])if(!seek.includes(marker))fail('RC3.25 player navigation/scrub baseline lost: '+marker);
 
-if(smart.includes('jumpForward(')||smart.includes('jumpBackward('))fail('RC3.35 must not take RC3.25 arrow/scrub ownership');
-if(smart.includes('rc32-player-navigation'))fail('RC3.35 must not rewrite player navigation module');
+if(smart.includes('jumpForward(')||smart.includes('jumpBackward('))fail('smart credits must not take RC3.25 arrow/scrub ownership');
+if(smart.includes('rc32-player-navigation'))fail('smart credits must not rewrite player navigation module');
 
 console.log('PASS: exact chapter credits trigger smart next-episode UI');
 console.log('PASS: files without credits chapters only autoplay at natural episode end');
 console.log('PASS: transient /api/next failure remains pending and retries every 3 seconds');
 console.log('PASS: retry wrapper leaves unrelated API traffic untouched');
-console.log('PASS: next episode uses existing /api/next contract and hidden data-play-source handoff');
+console.log('PASS: RC3.38 closes the current app-owned player state before next launch');
+console.log('PASS: RC3.38 persists completion after player close and before next launch');
+console.log('PASS: end-seek remains fallback only, not the primary early-credits handoff');
 console.log('PASS: autoplay setting is shared with RC3.7 diagnostics');
 console.log('PASS: RC3.25 smooth timeline ownership is preserved');
-console.log('HOME_CINEMA_RC337_NEXT_RETRY_SMOKE=PASS');
+console.log('HOME_CINEMA_RC338_ATOMIC_HANDOFF_SMOKE=PASS');
