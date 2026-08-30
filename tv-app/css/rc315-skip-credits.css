@@ -24,3 +24,87 @@
   background:rgba(20,22,24,.96);
 }
 .rc315-skip-credits.hidden{display:none!important}
+
+/* RC3.35: Kinopoisk/Okko-style in-player next-episode card.
+ * It does not replace RC3.25 timeline/navigation ownership. */
+.rc335-next-episode-panel{
+  position:absolute;
+  right:72px;
+  bottom:108px;
+  z-index:72;
+  width:610px;
+  box-sizing:border-box;
+  padding:28px 30px 26px;
+  border:1px solid rgba(255,255,255,.22);
+  border-radius:22px;
+  background:linear-gradient(150deg,rgba(18,21,28,.97),rgba(7,9,13,.96));
+  color:#fff;
+  box-shadow:0 24px 70px rgba(0,0,0,.62);
+}
+.rc335-next-episode-panel.hidden{display:none!important}
+.rc335-next-kicker{
+  font-size:15px;
+  font-weight:800;
+  letter-spacing:2px;
+  opacity:.58;
+}
+.rc335-next-title{
+  margin-top:8px;
+  font-size:28px;
+  line-height:1.2;
+  font-weight:800;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.rc335-next-subtitle{
+  margin-top:6px;
+  font-size:20px;
+  line-height:1.25;
+  opacity:.78;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.rc335-next-countdown{
+  min-height:22px;
+  margin-top:12px;
+  font-size:16px;
+  opacity:.62;
+}
+.rc335-next-actions{
+  display:flex;
+  gap:12px;
+  margin-top:18px;
+}
+.rc335-next-actions button{
+  min-height:58px;
+  padding:0 22px;
+  border-radius:12px;
+  border:2px solid rgba(255,255,255,.2);
+  color:#fff;
+  font-size:19px;
+  font-weight:750;
+}
+.rc335-next-primary{
+  flex:1 1 auto;
+  background:#fff;
+  color:#090b0f!important;
+  border-color:#fff!important;
+}
+.rc335-next-secondary{
+  flex:0 0 auto;
+  background:rgba(255,255,255,.08);
+}
+.rc335-focusable:focus,
+.rc335-focusable.focused{
+  outline:3px solid #fff;
+  outline-offset:4px;
+  transform:scale(1.025);
+}
+@media (max-width:1280px){
+  .rc335-next-episode-panel{right:48px;bottom:82px;width:520px;padding:22px 24px}
+  .rc335-next-title{font-size:24px}
+  .rc335-next-subtitle{font-size:18px}
+  .rc335-next-actions button{min-height:52px;font-size:17px}
+}
