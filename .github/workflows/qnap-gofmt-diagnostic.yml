@@ -1,4 +1,4 @@
-name: QNAP gofmt diagnostic
+name: QNAP diagnostics
 
 on:
   push:
@@ -8,7 +8,7 @@ permissions:
   contents: read
 
 jobs:
-  gofmt-diff:
+  qnap-diagnostics:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -27,9 +27,22 @@ jobs:
           gofmt -d $files > ../qnap-gofmt.patch
           cat ../qnap-gofmt.patch
 
-      - name: Upload gofmt patch
+      - name: Capture native Go test output
+        working-directory: native-qnap-d1
+        run: |
+          set +e
+          go test ./... > ../qnap-go-test.log 2>&1
+          code=$?
+          cat ../qnap-go-test.log
+          echo "$code" > ../qnap-go-test.exit
+          exit 0
+
+      - name: Upload QNAP diagnostics
         uses: actions/upload-artifact@v5
         with:
-          name: qnap-gofmt-patch
-          path: qnap-gofmt.patch
+          name: qnap-diagnostics
+          path: |
+            qnap-gofmt.patch
+            qnap-go-test.log
+            qnap-go-test.exit
           if-no-files-found: error
