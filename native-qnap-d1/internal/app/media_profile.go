@@ -124,7 +124,10 @@ func detectChapterMarkers(chapters []profileProbeChapter, durationMS int64) (int
 		}
 		if isCreditsChapter(title) && start > 0 {
 			if durationMS <= 0 || start >= durationMS/2 {
-				if start > creditsStart {
+				// Credits can be split into several chapters (end credits, closing
+				// credits, studio cards, etc.). The user-facing transition belongs
+				// at the first qualifying credits chapter, not the last one.
+				if creditsStart == 0 || start < creditsStart {
 					creditsStart = start
 				}
 			}
