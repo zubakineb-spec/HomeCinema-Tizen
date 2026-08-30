@@ -1,0 +1,35 @@
+name: QNAP gofmt diagnostic
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  gofmt-diff:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: "1.23.x"
+          cache-dependency-path: native-qnap-d1/go.mod
+
+      - name: Capture exact gofmt diff
+        working-directory: native-qnap-d1
+        run: |
+          files="internal/app/media_profile.go internal/app/media_profile_ffmpeg.go internal/app/scanner.go internal/app/rc315_chapter_markers_test.go internal/app/rc316_ffmpeg_profile_test.go internal/app/rc336_credits_marker_test.go"
+          gofmt -d $files > ../qnap-gofmt.patch
+          cat ../qnap-gofmt.patch
+
+      - name: Upload gofmt patch
+        uses: actions/upload-artifact@v5
+        with:
+          name: qnap-gofmt-patch
+          path: qnap-gofmt.patch
+          if-no-files-found: error
