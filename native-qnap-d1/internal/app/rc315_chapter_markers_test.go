@@ -36,11 +36,16 @@ func TestRC315LegacyProfileRequiresReprobe(t *testing.T) {
 	rc315 := legacy
 	rc315.ProfileVersion = mediaProfileVersion
 	if reusableMediaProfile(rc315) {
-		t.Fatal("RC3.15 profile must be reprofiled once for RC3.16 ffmpeg fallback")
+		t.Fatal("RC3.15 profile must be reprofiled")
+	}
+	rc316 := legacy
+	rc316.ProfileVersion = rc316ProfileVersion
+	if reusableMediaProfile(rc316) {
+		t.Fatal("profile 316 must be reprofiled once for corrected credits markers")
 	}
 	current := legacy
-	current.ProfileVersion = rc316ProfileVersion
+	current.ProfileVersion = creditsMarkerProfileVersion
 	if !reusableMediaProfile(current) {
-		t.Fatal("RC3.16 profile should be reusable")
+		t.Fatal("profile 317 should be reusable")
 	}
 }
