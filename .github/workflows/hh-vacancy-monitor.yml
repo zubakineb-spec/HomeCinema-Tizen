@@ -35,18 +35,20 @@ jobs:
             ${{ runner.os }}-hh-vacancy-state-
 
       - name: Validate agent
-        run: python -m py_compile hh-vacancy-agent/monitor_rss.py
+        run: |
+          python -m py_compile hh-vacancy-agent/monitor_rss.py
+          python -m py_compile hh-vacancy-agent/run_monitor.py
 
-      - name: Validate shared Telegram secrets
+      - name: Validate Telegram secrets
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           test -n "$TELEGRAM_BOT_TOKEN" || { echo "TELEGRAM_BOT_TOKEN secret is missing"; exit 2; }
           test -n "$TELEGRAM_CHAT_ID" || { echo "TELEGRAM_CHAT_ID secret is missing"; exit 2; }
-          echo "Shared Telegram secrets are configured."
+          echo "Telegram secrets are configured."
 
-      - name: Search HH RSS and send new vacancies
+      - name: Sync subscribers, search HH RSS and send new vacancies
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
@@ -54,7 +56,7 @@ jobs:
           MAX_PER_RUN: "10"
           HH_PERIOD_DAYS: "3"
           STATE_PATH: hh-vacancy-agent/data/state.json
-        run: python hh-vacancy-agent/monitor_rss.py
+        run: python hh-vacancy-agent/run_monitor.py
 
       - name: Save vacancy state
         if: always()
