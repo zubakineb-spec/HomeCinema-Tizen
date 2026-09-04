@@ -20,7 +20,7 @@ concurrency:
 jobs:
   monitor:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 12
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -31,7 +31,6 @@ jobs:
           python-version: "3.12"
 
       - name: Restore vacancy state
-        id: restore
         uses: actions/cache/restore@v4
         with:
           path: hh-vacancy-agent/data
@@ -40,7 +39,7 @@ jobs:
             ${{ runner.os }}-hh-vacancy-state-
 
       - name: Validate agent
-        run: python -m py_compile hh-vacancy-agent/monitor_v2.py
+        run: python -m py_compile hh-vacancy-agent/monitor_rss.py
 
       - name: Validate shared Telegram secrets
         env:
@@ -51,15 +50,15 @@ jobs:
           test -n "$TELEGRAM_CHAT_ID" || { echo "TELEGRAM_CHAT_ID secret is missing"; exit 2; }
           echo "Shared Telegram secrets are configured."
 
-      - name: Search HH and send new vacancies
+      - name: Search HH RSS and send new vacancies
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           MIN_SCORE: "70"
           MAX_PER_RUN: "10"
-          HH_PERIOD_DAYS: "1"
+          HH_PERIOD_DAYS: "3"
           STATE_PATH: hh-vacancy-agent/data/state.json
-        run: python hh-vacancy-agent/monitor_v2.py
+        run: python hh-vacancy-agent/monitor_rss.py
 
       - name: Save vacancy state
         if: always()
