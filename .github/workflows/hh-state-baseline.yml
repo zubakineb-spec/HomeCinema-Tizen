@@ -37,11 +37,13 @@ jobs:
         run: |
           python - <<'PY'
           import importlib.util
+          import sys
           from pathlib import Path
 
           path = Path("hh-vacancy-agent/monitor_rss.py")
           spec = importlib.util.spec_from_file_location("hh_monitor", path)
           module = importlib.util.module_from_spec(spec)
+          sys.modules["hh_monitor"] = module
           spec.loader.exec_module(module)
 
           state = module.load_state()
