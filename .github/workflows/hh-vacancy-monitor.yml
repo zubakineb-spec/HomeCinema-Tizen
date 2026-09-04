@@ -40,7 +40,7 @@ jobs:
             ${{ runner.os }}-hh-vacancy-state-
 
       - name: Validate agent
-        run: python -m py_compile hh-vacancy-agent/monitor.py
+        run: python -m py_compile hh-vacancy-agent/monitor_v2.py
 
       - name: Validate shared Telegram secrets
         env:
@@ -59,7 +59,7 @@ jobs:
           MAX_PER_RUN: "10"
           HH_PERIOD_DAYS: "1"
           STATE_PATH: hh-vacancy-agent/data/state.json
-        run: python hh-vacancy-agent/monitor.py
+        run: python hh-vacancy-agent/monitor_v2.py
 
       - name: Save vacancy state
         if: always()
