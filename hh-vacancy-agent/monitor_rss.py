@@ -19,39 +19,117 @@ import xml.etree.ElementTree as ET
 RSS_URL = "https://hh.ru/search/vacancy/rss"
 TG_API = "https://api.telegram.org"
 STATE = Path(os.getenv("STATE_PATH", "hh-vacancy-agent/data/state.json"))
-UA = os.getenv("HH_USER_AGENT", "HH-Vacancy-Monitor/1.2 (+https://github.com/zubakineb-spec/HomeCinema-Tizen)")
+UA = os.getenv("HH_USER_AGENT", "HH-Vacancy-Monitor/1.4 (+https://github.com/zubakineb-spec/HomeCinema-Tizen)")
 MIN_SCORE = int(os.getenv("MIN_SCORE", "70"))
 MAX_PER_RUN = int(os.getenv("MAX_PER_RUN", "10"))
 PERIOD_DAYS = int(os.getenv("HH_PERIOD_DAYS", "3"))
 
-# RSS yields the newest items per query, so keep several focused searches instead of one broad query.
-QUERIES = (
+# Narrow title searches keep precision high. Broader full-text searches catch neutral
+# titles whose actual duties match the candidate profile.
+TITLE_SEARCHES = (
     "международное сотрудничество",
     "международные отношения",
     "внешние связи",
     "международные проекты",
+    "координатор международных проектов",
+    "специалист международных проектов",
+    "менеджер международных проектов",
+    "аналитик международных проектов",
     "зарубежные партнеры",
+    "международные коммуникации",
+    "партнерские проекты",
+    "координатор проектов",
+    "специалист проектного офиса",
     "project coordinator",
     "external relations",
+    "partnerships",
     "внешнеэкономическая деятельность",
+    "ВЭД",
+    "экспорт",
+)
+
+FULL_TEXT_SEARCHES = (
+    "международное сотрудничество",
+    "международные проекты английский язык",
+    "зарубежные партнеры",
+    "официальная переписка английский",
+    "международные соглашения",
+    "проектная координация партнеры",
+    "внешнеэкономическая деятельность",
+    "project coordination international",
 )
 
 PROFILE = (
-    "международ", "внешн", "international", "external relations",
-    "зарубежн", "партнер", "партнёр", "проект", "project",
-    "аналит", "английск", "english", "экспорт", "вэд",
-    "внешнеэконом", "делегац", "протокол", "координатор",
-    "сотрудничеств", "коммуникац", "agreement", "partner",
+    "международ",
+    "внешн",
+    "international",
+    "external relations",
+    "global",
+    "зарубежн",
+    "партнер",
+    "партнёр",
+    "partner",
+    "partnership",
+    "проект",
+    "project",
+    "аналит",
+    "английск",
+    "english",
+    "экспорт",
+    "вэд",
+    "внешнеэконом",
+    "делегац",
+    "протокол",
+    "координатор",
+    "coordinator",
+    "сотрудничеств",
+    "коммуникац",
+    "agreement",
+    "соглашен",
+    "переписк",
+    "stakeholder",
+    "cross-border",
+    "межведомствен",
 )
+
+STRONG_TITLE_MARKERS = (
+    "международ",
+    "внешн",
+    "international",
+    "external",
+    "экспорт",
+    "вэд",
+    "partnership",
+)
+
 NEGATIVE = (
-    "холодные звонки", "активные продажи", "продажи физическим лицам",
-    "b2c", "call-центр", "колл-центр", "торговый представитель",
-    "риелтор", "кассир",
+    "холодные звонки",
+    "активные продажи",
+    "продажи физическим лицам",
+    "b2c",
+    "call-центр",
+    "колл-центр",
+    "торговый представитель",
+    "риелтор",
+    "кассир",
+    "план продаж",
+    "воронка продаж",
+    "лидогенерац",
+    "поиск новых клиентов",
 )
+
 PRIORITY_EMPLOYERS = (
-    "агентство стратегических инициатив", "росконгресс", "россотрудничество",
-    "росатом", "российский экспортный центр", "торгово-промышленная палата",
-    "минэкономразвития", "минпромторг", "дом.рф", "ростех", "ржд",
+    "агентство стратегических инициатив",
+    "росконгресс",
+    "россотрудничество",
+    "росатом",
+    "российский экспортный центр",
+    "торгово-промышленная палата",
+    "минэкономразвития",
+    "минпромторг",
+    "дом.рф",
+    "ростех",
+    "ржд",
 )
 
 
@@ -72,6 +150,16 @@ class Match:
     vacancy: Vacancy
     score: int
     reasons: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SearchSpec:
+    query: str
+    title_only: bool
+
+    @property
+    def label(self) -> str:
+        return "title" if self.title_only else "full-text"
 
 
 class HHFeedError(RuntimeError):
@@ -127,14 +215,16 @@ def vacancy_id(url: str) -> str:
     return match.group(1) if match else ""
 
 
-def fetch_feed(query: str) -> list[Vacancy]:
-    params = {
-        "text": query,
-        "search_field": "name",
+def fetch_feed(spec: SearchSpec) -> list[Vacancy]:
+    params: dict[str, str] = {
+        "text": spec.query,
         "area": "1",                  # Moscow
         "period": str(PERIOD_DAYS),
         "work_format": "ON_SITE",     # employer location / office only
     }
+    if spec.title_only:
+        params["search_field"] = "name"
+
     url = f"{RSS_URL}?{urlencode(params)}"
     request = Request(
         url,
@@ -175,7 +265,6 @@ def fetch_feed(query: str) -> list[Vacancy]:
 
 
 def salary_numbers(text: str) -> list[int]:
-    # Salary strings may contain spaces, nbsp/narrow nbsp and currency labels.
     normalized = (text or "").replace("\u00a0", " ").replace("\u202f", " ")
     numbers = []
     for raw in re.findall(r"\d[\d ]*", normalized):
@@ -194,8 +283,26 @@ def salary_ok(vacancy: Vacancy) -> bool:
     nums = salary_numbers(text)
     if not nums:
         return True
-    # Reject only when the whole advertised range is below the hard minimum.
     return max(nums) >= 40_000
+
+
+def profile_hits(vacancy: Vacancy) -> int:
+    text = f"{vacancy.title} {vacancy.description}".lower()
+    return sum(1 for marker in PROFILE if marker in text)
+
+
+def relevance_gate(vacancy: Vacancy) -> bool:
+    title = vacancy.title.lower()
+    hits = profile_hits(vacancy)
+    if any(marker in title for marker in STRONG_TITLE_MARKERS):
+        return True
+    project_coordinator_title = (
+        ("координатор" in title or "coordinator" in title)
+        and ("проект" in title or "project" in title)
+    )
+    if project_coordinator_title and hits >= 3:
+        return True
+    return hits >= 4
 
 
 def score(vacancy: Vacancy) -> tuple[int, tuple[str, ...]]:
@@ -210,15 +317,22 @@ def score(vacancy: Vacancy) -> tuple[int, tuple[str, ...]]:
         value += points
         reasons.append(f"профильная должность +{points}")
 
-    profile_hits = sum(1 for marker in PROFILE if marker in text)
-    if profile_hits:
-        points = min(24, profile_hits * 2)
+    matched_profile = sum(1 for marker in PROFILE if marker in text)
+    if matched_profile:
+        points = min(24, matched_profile * 2)
         value += points
         reasons.append(f"совпадение с профилем +{points}")
 
+    if matched_profile >= 5:
+        value += 10
+        reasons.append("глубокое совпадение обязанностей +10")
+    elif matched_profile >= 3:
+        value += 5
+        reasons.append("сильное совпадение обязанностей +5")
+
     bad_hits = sum(1 for marker in NEGATIVE if marker in text)
     if bad_hits:
-        penalty = min(35, 20 + (bad_hits - 1) * 5)
+        penalty = min(40, 20 + (bad_hits - 1) * 5)
         value -= penalty
         reasons.append(f"непрофильные продажи −{penalty}")
 
@@ -260,16 +374,19 @@ def published_ts(vacancy: Vacancy) -> float:
 
 
 def collect() -> tuple[list[Match], list[str]]:
+    searches = [SearchSpec(query, True) for query in TITLE_SEARCHES]
+    searches.extend(SearchSpec(query, False) for query in FULL_TEXT_SEARCHES)
+
     unique: dict[str, Vacancy] = {}
     errors: list[str] = []
-    for index, query in enumerate(QUERIES):
+    for index, spec in enumerate(searches):
         if index:
-            time.sleep(2.0)
+            time.sleep(1.2)
         try:
-            items = fetch_feed(query)
-            print(f"HH RSS OK: {query!r}, items={len(items)}")
+            items = fetch_feed(spec)
+            print(f"HH RSS OK [{spec.label}]: {spec.query!r}, items={len(items)}")
         except HHFeedError as exc:
-            print(f"HH RSS FAIL: {query!r}, {exc}", file=sys.stderr)
+            print(f"HH RSS FAIL [{spec.label}]: {spec.query!r}, {exc}", file=sys.stderr)
             errors.append(str(exc))
             continue
         for item in items:
@@ -279,15 +396,28 @@ def collect() -> tuple[list[Match], list[str]]:
         raise HHFeedError("all RSS queries failed: " + " | ".join(errors[:4]))
 
     matches: list[Match] = []
+    rejected_relevance = 0
+    rejected_salary = 0
     for vacancy in unique.values():
         if "москва" not in vacancy.location.lower():
             continue
         if not salary_ok(vacancy):
+            rejected_salary += 1
+            continue
+        if not relevance_gate(vacancy):
+            rejected_relevance += 1
             continue
         points, reasons = score(vacancy)
         if points >= MIN_SCORE:
             matches.append(Match(vacancy, points, reasons))
+
     matches.sort(key=lambda item: (item.score, published_ts(item.vacancy)), reverse=True)
+    print(json.dumps({
+        "rss_unique": len(unique),
+        "rejected_relevance": rejected_relevance,
+        "rejected_salary": rejected_salary,
+        "matches_after_score": len(matches),
+    }, ensure_ascii=False))
     return matches, errors
 
 
@@ -322,8 +452,12 @@ def card(match: Match) -> str:
     vacancy = match.vacancy
     why = "; ".join(match.reasons[:5])
     desc = vacancy.description
-    # RSS description contains labeled fields; keep a compact excerpt only when useful.
-    desc = re.sub(r"^(Вакансия компании|Регион|Предполагаемый уровень месячного дохода).*", "", desc, flags=re.I)
+    desc = re.sub(
+        r"^(Вакансия компании|Регион|Предполагаемый уровень месячного дохода).*",
+        "",
+        desc,
+        flags=re.I,
+    )
     parts = [
         "<b>💼 ВАКАНСИЯ</b>",
         f"<b>🎯 {match.score}/100 — {html.escape(vacancy.title)}</b>",
@@ -382,13 +516,15 @@ def main() -> int:
 
     save_state(state)
     print(json.dumps({
-        "source": "hh_rss",
+        "source": "hh_rss_expanded",
         "matches": len(matches),
         "new": len(new_matches),
         "sent": sent_count,
         "query_errors": len(query_errors),
         "min_score": MIN_SCORE,
         "period_days": PERIOD_DAYS,
+        "title_searches": len(TITLE_SEARCHES),
+        "full_text_searches": len(FULL_TEXT_SEARCHES),
     }, ensure_ascii=False))
     return 0
 
