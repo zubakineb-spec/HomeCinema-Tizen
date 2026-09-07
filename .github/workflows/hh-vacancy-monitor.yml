@@ -2,9 +2,6 @@ name: HH Vacancy Monitor
 
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - "hh-vacancy-agent/monitor_rss.py"
   schedule:
     # Twice per hour; offset from :00 to reduce GitHub scheduler congestion.
     - cron: "8,38 * * * *"
