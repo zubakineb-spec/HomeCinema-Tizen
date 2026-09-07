@@ -2,6 +2,9 @@ name: HH Vacancy Monitor
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - "hh-vacancy-agent/monitor_rss.py"
   schedule:
     # Twice per hour; offset from :00 to reduce GitHub scheduler congestion.
     - cron: "8,38 * * * *"
@@ -16,7 +19,7 @@ concurrency:
 jobs:
   monitor:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -54,7 +57,7 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           MIN_SCORE: "70"
           MAX_PER_RUN: "10"
-          HH_PERIOD_DAYS: "3"
+          HH_PERIOD_DAYS: "7"
           STATE_PATH: hh-vacancy-agent/data/state.json
         run: python hh-vacancy-agent/run_monitor.py
 
