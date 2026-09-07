@@ -19,13 +19,14 @@ import xml.etree.ElementTree as ET
 RSS_URL = "https://hh.ru/search/vacancy/rss"
 TG_API = "https://api.telegram.org"
 STATE = Path(os.getenv("STATE_PATH", "hh-vacancy-agent/data/state.json"))
-UA = os.getenv("HH_USER_AGENT", "HH-Vacancy-Monitor/1.4 (+https://github.com/zubakineb-spec/HomeCinema-Tizen)")
+UA = os.getenv(
+    "HH_USER_AGENT",
+    "HH-Vacancy-Monitor/1.5 (+https://github.com/zubakineb-spec/HomeCinema-Tizen)",
+)
 MIN_SCORE = int(os.getenv("MIN_SCORE", "70"))
 MAX_PER_RUN = int(os.getenv("MAX_PER_RUN", "10"))
-PERIOD_DAYS = int(os.getenv("HH_PERIOD_DAYS", "3"))
+PERIOD_DAYS = int(os.getenv("HH_PERIOD_DAYS", "7"))
 
-# Narrow title searches keep precision high. Broader full-text searches catch neutral
-# titles whose actual duties match the candidate profile.
 TITLE_SEARCHES = (
     "международное сотрудничество",
     "международные отношения",
@@ -35,16 +36,42 @@ TITLE_SEARCHES = (
     "специалист международных проектов",
     "менеджер международных проектов",
     "аналитик международных проектов",
-    "зарубежные партнеры",
+    "ассистент международных проектов",
     "международные коммуникации",
+    "внешние коммуникации",
+    "зарубежные партнеры",
+    "работа с зарубежными партнерами",
     "партнерские проекты",
-    "координатор проектов",
-    "специалист проектного офиса",
-    "project coordinator",
-    "external relations",
+    "partner relations",
     "partnerships",
+    "external relations",
+    "international relations",
+    "international cooperation",
+    "international project coordinator",
+    "international project assistant",
+    "координатор международных мероприятий",
+    "специалист международных мероприятий",
+    "международный протокол",
+    "координатор делегаций",
+    "координатор проектов",
+    "ассистент проекта",
+    "project assistant",
+    "project coordinator",
+    "program coordinator",
+    "program assistant",
+    "project support",
+    "специалист проектного офиса",
+    "аналитик проектного офиса",
+    "координатор проектного офиса",
+    "межведомственное взаимодействие",
+    "взаимодействие с государственными органами",
+    "government relations",
+    "GR coordinator",
     "внешнеэкономическая деятельность",
-    "ВЭД",
+    "координатор ВЭД",
+    "специалист ВЭД",
+    "экспортные проекты",
+    "координатор экспорта",
     "экспорт",
 )
 
@@ -54,82 +81,68 @@ FULL_TEXT_SEARCHES = (
     "зарубежные партнеры",
     "официальная переписка английский",
     "международные соглашения",
+    "подготовка соглашений международные",
     "проектная координация партнеры",
-    "внешнеэкономическая деятельность",
+    "международные мероприятия делегации",
+    "протокол делегации английский",
+    "внешние коммуникации партнеры",
+    "межведомственное взаимодействие проекты",
+    "взаимодействие с госорганами международные проекты",
+    "аналитические материалы международные",
+    "research international projects",
     "project coordination international",
+    "project support international",
+    "partner relations international",
+    "external communications international",
+    "foreign partners english",
+    "внешнеэкономическая деятельность",
+    "экспортные проекты английский",
+    "ВЭД английский язык",
 )
 
 PROFILE = (
-    "международ",
-    "внешн",
-    "international",
-    "external relations",
-    "global",
-    "зарубежн",
-    "партнер",
-    "партнёр",
-    "partner",
-    "partnership",
-    "проект",
-    "project",
-    "аналит",
-    "английск",
-    "english",
-    "экспорт",
-    "вэд",
-    "внешнеэконом",
-    "делегац",
-    "протокол",
-    "координатор",
-    "coordinator",
-    "сотрудничеств",
-    "коммуникац",
-    "agreement",
-    "соглашен",
-    "переписк",
-    "stakeholder",
-    "cross-border",
-    "межведомствен",
+    "международ", "внешн", "international", "external relations",
+    "external communications", "global", "зарубежн", "партнер", "партнёр",
+    "partner", "partnership", "project", "проект", "program", "программ",
+    "аналит", "research", "исслед", "английск", "english", "экспорт",
+    "export", "вэд", "внешнеэконом", "делегац", "протокол", "координатор",
+    "coordinator", "assistant", "ассистент", "сотрудничеств", "коммуникац",
+    "agreement", "соглашен", "переписк", "correspondence", "stakeholder",
+    "cross-border", "межведомствен", "госорган", "government",
+    "project office", "проектного офиса", "project support", "поддержка проекта",
+)
+
+INTERNATIONAL_MARKERS = (
+    "международ", "international", "зарубежн", "foreign partner", "экспорт",
+    "export", "вэд", "внешнеэконом", "cross-border",
 )
 
 STRONG_TITLE_MARKERS = (
-    "международ",
-    "внешн",
-    "international",
-    "external",
-    "экспорт",
-    "вэд",
-    "partnership",
+    "международ", "international", "external relations", "внешн", "экспорт",
+    "export", "вэд", "partnership", "partner relations", "межведомствен",
+    "government relations",
+)
+
+ADJACENT_TITLE_MARKERS = (
+    "координатор", "coordinator", "ассистент проекта", "project assistant",
+    "project support", "project office", "проектного офиса", "program coordinator",
+    "program assistant", "протокол", "делегац",
 )
 
 NEGATIVE = (
-    "холодные звонки",
-    "активные продажи",
-    "продажи физическим лицам",
-    "b2c",
-    "call-центр",
-    "колл-центр",
-    "торговый представитель",
-    "риелтор",
-    "кассир",
-    "план продаж",
-    "воронка продаж",
-    "лидогенерац",
-    "поиск новых клиентов",
+    "холодные звонки", "активные продажи", "продажи физическим лицам", "b2c",
+    "call-центр", "колл-центр", "торговый представитель", "риелтор", "кассир",
+    "план продаж", "воронка продаж", "лидогенерац", "поиск новых клиентов",
+    "привлечение новых клиентов", "выполнение плана продаж", "продажа услуг",
+    "прямые продажи", "активный поиск клиентов", "работа с возражениями",
 )
 
 PRIORITY_EMPLOYERS = (
-    "агентство стратегических инициатив",
-    "росконгресс",
-    "россотрудничество",
-    "росатом",
-    "российский экспортный центр",
-    "торгово-промышленная палата",
-    "минэкономразвития",
-    "минпромторг",
-    "дом.рф",
-    "ростех",
-    "ржд",
+    "агентство стратегических инициатив", "росконгресс", "россотрудничество",
+    "росатом", "российский экспортный центр", "торгово-промышленная палата",
+    "минэкономразвития", "минпромторг", "дом.рф", "ростех", "ржд", "вэб.рф",
+    "вэб рф", "сколково", "московский экспортный центр", "правительство москвы",
+    "департамент внешнеэкономических",
 )
 
 
@@ -218,16 +231,15 @@ def vacancy_id(url: str) -> str:
 def fetch_feed(spec: SearchSpec) -> list[Vacancy]:
     params: dict[str, str] = {
         "text": spec.query,
-        "area": "1",                  # Moscow
+        "area": "1",
         "period": str(PERIOD_DAYS),
-        "work_format": "ON_SITE",     # employer location / office only
+        "work_format": "ON_SITE",
     }
     if spec.title_only:
         params["search_field"] = "name"
 
-    url = f"{RSS_URL}?{urlencode(params)}"
     request = Request(
-        url,
+        f"{RSS_URL}?{urlencode(params)}",
         headers={
             "User-Agent": UA,
             "Accept": "application/rss+xml, application/xml, text/xml;q=0.9, */*;q=0.8",
@@ -255,23 +267,29 @@ def fetch_feed(spec: SearchSpec) -> list[Vacancy]:
         if not vid:
             continue
         desc_html = item.findtext("description") or ""
-        company = field(desc_html, "Вакансия компании")
-        salary = field(desc_html, "Предполагаемый уровень месячного дохода")
-        location = field(desc_html, "Регион") or "Москва"
-        description = clean(desc_html)
-        published = clean(item.findtext("pubDate") or "")
-        result.append(Vacancy(vid, title, company, link, salary, location, description, published))
+        result.append(
+            Vacancy(
+                vid,
+                title,
+                field(desc_html, "Вакансия компании"),
+                link,
+                field(desc_html, "Предполагаемый уровень месячного дохода"),
+                field(desc_html, "Регион") or "Москва",
+                clean(desc_html),
+                clean(item.findtext("pubDate") or ""),
+            )
+        )
     return result
 
 
 def salary_numbers(text: str) -> list[int]:
     normalized = (text or "").replace("\u00a0", " ").replace("\u202f", " ")
-    numbers = []
+    values: list[int] = []
     for raw in re.findall(r"\d[\d ]*", normalized):
         compact = raw.replace(" ", "")
         if compact.isdigit():
-            numbers.append(int(compact))
-    return [n for n in numbers if n >= 1000]
+            values.append(int(compact))
+    return [value for value in values if value >= 1000]
 
 
 def salary_ok(vacancy: Vacancy) -> bool:
@@ -280,10 +298,8 @@ def salary_ok(vacancy: Vacancy) -> bool:
         return True
     if any(cur in text for cur in ("usd", "$", "eur", "€", "kzt", "byn")):
         return True
-    nums = salary_numbers(text)
-    if not nums:
-        return True
-    return max(nums) >= 40_000
+    values = salary_numbers(text)
+    return not values or max(values) >= 40_000
 
 
 def profile_hits(vacancy: Vacancy) -> int:
@@ -293,16 +309,18 @@ def profile_hits(vacancy: Vacancy) -> int:
 
 def relevance_gate(vacancy: Vacancy) -> bool:
     title = vacancy.title.lower()
+    text = f"{vacancy.title} {vacancy.description}".lower()
     hits = profile_hits(vacancy)
+    international = any(marker in text for marker in INTERNATIONAL_MARKERS)
+    priority = any(marker in vacancy.company.lower() for marker in PRIORITY_EMPLOYERS)
+
     if any(marker in title for marker in STRONG_TITLE_MARKERS):
         return True
-    project_coordinator_title = (
-        ("координатор" in title or "coordinator" in title)
-        and ("проект" in title or "project" in title)
-    )
-    if project_coordinator_title and hits >= 3:
+    if any(marker in title for marker in ADJACENT_TITLE_MARKERS):
+        return international and hits >= 3
+    if priority and international and hits >= 3:
         return True
-    return hits >= 4
+    return international and hits >= 5
 
 
 def score(vacancy: Vacancy) -> tuple[int, tuple[str, ...]]:
@@ -317,22 +335,30 @@ def score(vacancy: Vacancy) -> tuple[int, tuple[str, ...]]:
         value += points
         reasons.append(f"профильная должность +{points}")
 
-    matched_profile = sum(1 for marker in PROFILE if marker in text)
-    if matched_profile:
-        points = min(24, matched_profile * 2)
+    matched = sum(1 for marker in PROFILE if marker in text)
+    if matched:
+        points = min(26, matched * 2)
         value += points
         reasons.append(f"совпадение с профилем +{points}")
-
-    if matched_profile >= 5:
-        value += 10
-        reasons.append("глубокое совпадение обязанностей +10")
-    elif matched_profile >= 3:
+    if matched >= 7:
+        value += 12
+        reasons.append("очень глубокое совпадение обязанностей +12")
+    elif matched >= 5:
+        value += 9
+        reasons.append("глубокое совпадение обязанностей +9")
+    elif matched >= 3:
         value += 5
         reasons.append("сильное совпадение обязанностей +5")
 
+    if any(marker in title for marker in ADJACENT_TITLE_MARKERS) and any(
+        marker in text for marker in INTERNATIONAL_MARKERS
+    ):
+        value += 6
+        reasons.append("смежная роль с международным содержанием +6")
+
     bad_hits = sum(1 for marker in NEGATIVE if marker in text)
     if bad_hits:
-        penalty = min(40, 20 + (bad_hits - 1) * 5)
+        penalty = min(50, 22 + (bad_hits - 1) * 7)
         value -= penalty
         reasons.append(f"непрофильные продажи −{penalty}")
 
@@ -341,13 +367,13 @@ def score(vacancy: Vacancy) -> tuple[int, tuple[str, ...]]:
         value += 15
         reasons.append("приоритетный работодатель +15")
 
-    nums = salary_numbers(vacancy.salary)
+    values = salary_numbers(vacancy.salary)
     salary_lower = vacancy.salary.lower()
     if not vacancy.salary or "не указан" in salary_lower:
         value += 3
         reasons.append("зарплата не указана")
-    elif nums and not any(cur in salary_lower for cur in ("usd", "$", "eur", "€", "kzt", "byn")):
-        reference = max(nums)
+    elif values and not any(cur in salary_lower for cur in ("usd", "$", "eur", "€", "kzt", "byn")):
+        reference = max(values)
         if reference >= 130_000:
             value += 15
             reasons.append("зарплата 130 тыс.+ +15")
@@ -367,21 +393,28 @@ def score(vacancy: Vacancy) -> tuple[int, tuple[str, ...]]:
 
 def published_ts(vacancy: Vacancy) -> float:
     try:
-        dt = parsedate_to_datetime(vacancy.published)
-        return dt.timestamp()
+        return parsedate_to_datetime(vacancy.published).timestamp()
     except (TypeError, ValueError, OverflowError):
         return 0.0
+
+
+def published_text(vacancy: Vacancy) -> str:
+    try:
+        dt = parsedate_to_datetime(vacancy.published)
+        return dt.astimezone(timezone(timedelta(hours=3))).strftime("%d.%m.%Y %H:%M")
+    except (TypeError, ValueError, OverflowError):
+        return vacancy.published
 
 
 def collect() -> tuple[list[Match], list[str]]:
     searches = [SearchSpec(query, True) for query in TITLE_SEARCHES]
     searches.extend(SearchSpec(query, False) for query in FULL_TEXT_SEARCHES)
-
     unique: dict[str, Vacancy] = {}
     errors: list[str] = []
+
     for index, spec in enumerate(searches):
         if index:
-            time.sleep(1.2)
+            time.sleep(0.8)
         try:
             items = fetch_feed(spec)
             print(f"HH RSS OK [{spec.label}]: {spec.query!r}, items={len(items)}")
@@ -396,8 +429,7 @@ def collect() -> tuple[list[Match], list[str]]:
         raise HHFeedError("all RSS queries failed: " + " | ".join(errors[:4]))
 
     matches: list[Match] = []
-    rejected_relevance = 0
-    rejected_salary = 0
+    rejected_relevance = rejected_salary = below_score = 0
     for vacancy in unique.values():
         if "москва" not in vacancy.location.lower():
             continue
@@ -410,12 +442,15 @@ def collect() -> tuple[list[Match], list[str]]:
         points, reasons = score(vacancy)
         if points >= MIN_SCORE:
             matches.append(Match(vacancy, points, reasons))
+        else:
+            below_score += 1
 
     matches.sort(key=lambda item: (item.score, published_ts(item.vacancy)), reverse=True)
     print(json.dumps({
         "rss_unique": len(unique),
         "rejected_relevance": rejected_relevance,
         "rejected_salary": rejected_salary,
+        "below_score": below_score,
         "matches_after_score": len(matches),
     }, ensure_ascii=False))
     return matches, errors
@@ -450,12 +485,11 @@ def telegram_send(text: str, url: str | None = None) -> None:
 
 def card(match: Match) -> str:
     vacancy = match.vacancy
-    why = "; ".join(match.reasons[:5])
-    desc = vacancy.description
+    why = "; ".join(match.reasons[:6])
     desc = re.sub(
         r"^(Вакансия компании|Регион|Предполагаемый уровень месячного дохода).*",
         "",
-        desc,
+        vacancy.description,
         flags=re.I,
     )
     parts = [
@@ -465,8 +499,10 @@ def card(match: Match) -> str:
         f"💰 {html.escape(vacancy.salary if vacancy.salary and 'не указан' not in vacancy.salary.lower() else 'не указана')}",
         f"📍 {html.escape(vacancy.location or 'Москва')} • офис",
     ]
+    if published_text(vacancy):
+        parts.append(f"🗓 {html.escape(published_text(vacancy))}")
     if desc.strip():
-        parts.append(f"<b>Кратко:</b> {html.escape(desc.strip()[:650])}")
+        parts.append(f"<b>Кратко:</b> {html.escape(desc.strip()[:700])}")
     parts.append(f"<b>Почему подходит:</b> {html.escape(why)}")
     parts.append(f"ID HH: <code>{html.escape(vacancy.vacancy_id)}</code>")
     return "\n".join(parts)
@@ -493,7 +529,8 @@ def main() -> int:
         if alert_due(state, "hh_rss_unavailable"):
             try:
                 telegram_send(
-                    "<b>⚠️ HH Vacancy Monitor</b>\nRSS-выдача HH временно недоступна. Следующий GitHub-запуск повторит попытку автоматически."
+                    "<b>⚠️ HH Vacancy Monitor</b>\n"
+                    "RSS-выдача HH временно недоступна. Следующий GitHub-запуск повторит попытку автоматически."
                 )
                 state["alerts"]["hh_rss_unavailable"] = now().isoformat()
             except Exception as send_exc:
@@ -503,7 +540,7 @@ def main() -> int:
         return 0
 
     sent = state.setdefault("sent", {})
-    new_matches = [m for m in matches if m.vacancy.vacancy_id not in sent]
+    new_matches = [match for match in matches if match.vacancy.vacancy_id not in sent]
     sent_count = 0
     for match in new_matches[:MAX_PER_RUN]:
         try:
@@ -511,12 +548,15 @@ def main() -> int:
             sent[match.vacancy.vacancy_id] = now().isoformat()
             sent_count += 1
         except Exception as exc:
-            print(f"Telegram send FAIL for {match.vacancy.vacancy_id}: {type(exc).__name__}", file=sys.stderr)
+            print(
+                f"Telegram send FAIL for {match.vacancy.vacancy_id}: {type(exc).__name__}",
+                file=sys.stderr,
+            )
         time.sleep(0.5)
 
     save_state(state)
     print(json.dumps({
-        "source": "hh_rss_expanded",
+        "source": "hh_rss_adjacent_roles",
         "matches": len(matches),
         "new": len(new_matches),
         "sent": sent_count,
