@@ -54,6 +54,9 @@ TITLE_SEARCHES = (
     "международный протокол",
     "координатор делегаций",
     "координатор проектов",
+    "менеджер проектов",
+    "project manager",
+    "international project manager",
     "ассистент проекта",
     "project assistant",
     "project coordinator",
@@ -67,9 +70,6 @@ TITLE_SEARCHES = (
     "взаимодействие с государственными органами",
     "government relations",
     "GR coordinator",
-    "внешнеэкономическая деятельность",
-    "координатор ВЭД",
-    "специалист ВЭД",
     "экспортные проекты",
     "координатор экспорта",
     "экспорт",
@@ -77,14 +77,14 @@ TITLE_SEARCHES = (
 
 FULL_TEXT_SEARCHES = (
     "международное сотрудничество",
-    "международные проекты английский язык",
+    "международные проекты партнеры",
     "зарубежные партнеры",
-    "официальная переписка английский",
+    "официальная переписка международные проекты",
     "международные соглашения",
     "подготовка соглашений международные",
     "проектная координация партнеры",
     "международные мероприятия делегации",
-    "протокол делегации английский",
+    "протокол делегации международные",
     "внешние коммуникации партнеры",
     "межведомственное взаимодействие проекты",
     "взаимодействие с госорганами международные проекты",
@@ -94,18 +94,18 @@ FULL_TEXT_SEARCHES = (
     "project support international",
     "partner relations international",
     "external communications international",
-    "foreign partners english",
-    "внешнеэкономическая деятельность",
-    "экспортные проекты английский",
-    "ВЭД английский язык",
+    "foreign partners international projects",
+    "экспортные проекты международные",
+    "project manager international",
+    "менеджер проектов международные партнеры",
 )
 
 PROFILE = (
     "международ", "внешн", "international", "external relations",
     "external communications", "global", "зарубежн", "партнер", "партнёр",
     "partner", "partnership", "project", "проект", "program", "программ",
-    "аналит", "research", "исслед", "английск", "english", "экспорт",
-    "export", "вэд", "внешнеэконом", "делегац", "протокол", "координатор",
+    "аналит", "research", "исслед", "экспорт", "export", "делегац",
+    "протокол", "координатор", "project manager", "менеджер проектов",
     "coordinator", "assistant", "ассистент", "сотрудничеств", "коммуникац",
     "agreement", "соглашен", "переписк", "correspondence", "stakeholder",
     "cross-border", "межведомствен", "госорган", "government",
@@ -114,19 +114,19 @@ PROFILE = (
 
 INTERNATIONAL_MARKERS = (
     "международ", "international", "зарубежн", "foreign partner", "экспорт",
-    "export", "вэд", "внешнеэконом", "cross-border",
+    "export", "cross-border",
 )
 
 STRONG_TITLE_MARKERS = (
     "международ", "international", "external relations", "внешн", "экспорт",
-    "export", "вэд", "partnership", "partner relations", "межведомствен",
+    "export", "partnership", "partner relations", "межведомствен",
     "government relations",
 )
 
 ADJACENT_TITLE_MARKERS = (
     "координатор", "coordinator", "ассистент проекта", "project assistant",
     "project support", "project office", "проектного офиса", "program coordinator",
-    "program assistant", "протокол", "делегац",
+    "program assistant", "project manager", "менеджер проектов", "протокол", "делегац",
 )
 
 NEGATIVE = (
@@ -135,6 +135,7 @@ NEGATIVE = (
     "план продаж", "воронка продаж", "лидогенерац", "поиск новых клиентов",
     "привлечение новых клиентов", "выполнение плана продаж", "продажа услуг",
     "прямые продажи", "активный поиск клиентов", "работа с возражениями",
+    "менеджер вэд", "менеджер по вэд", "менеджер внешнеэкономической деятельности",
 )
 
 PRIORITY_EMPLOYERS = (
